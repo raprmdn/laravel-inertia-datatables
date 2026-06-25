@@ -145,23 +145,24 @@ trait HasFilters
     private function applyDateRangeCondition($query, string $column, ?string $from, ?string $to): void
     {
         if ($from && $to) {
-            $query->whereDate($column, '>=', $from)->whereDate($column, '<=', $to);
+            $query->whereBetween($column, ["{$from} 00:00:00", "{$to} 23:59:59"]);
+
             return;
         }
 
         if ($from) {
-            $query->whereDate($column, '>=', $from);
+            $query->where($column, '>=', "{$from} 00:00:00");
+
             return;
         }
 
         if ($to) {
-            $query->whereDate($column, '<=', $to);
+            $query->where($column, '<=', "{$to} 23:59:59");
         }
     }
 
     private function isJsonColumn(string $column, ?string $configuredColumn = null): bool
     {
-        info($this->jsonColumns);
         return in_array($column, $this->jsonColumns, true)
             || ($configuredColumn !== null && in_array($configuredColumn, $this->jsonColumns, true));
     }
