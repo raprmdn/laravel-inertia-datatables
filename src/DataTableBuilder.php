@@ -33,6 +33,8 @@ class DataTableBuilder
     }
 
     /**
+     * Which query to use for the data table.
+     *
      * @param EloquentBuilder<TModel>|QueryBuilder $query
      * @return $this
      */
@@ -44,6 +46,13 @@ class DataTableBuilder
     }
 
     /**
+     * Set relationships that should be eager loaded.
+     *
+     * The format should be `relationship`.
+     * Nested relationships may use dot notation, for example `contact.channel`.
+     *
+     * Examples: `channel`, `createdBy`, `contact.channel`.
+     *
      * @param array<int, string> $relationships
      * @return $this
      */
@@ -55,6 +64,10 @@ class DataTableBuilder
     }
 
     /**
+     * Set relationship counts that should be eager loaded.
+     *
+     * Examples: `tickets`, `comments`.
+     *
      * @param array<int, string> $relationships
      * @return $this
      */
@@ -66,6 +79,13 @@ class DataTableBuilder
     }
 
     /**
+     * Set columns that are searchable.
+     *
+     * Normal columns should use the column name.
+     * Relationship columns should use dot notation.
+     *
+     * Examples: `name`, `email`, `contact.name`, `reason.parent.name`.
+     *
      * @param array<int, string> $searchable
      * @return $this
      */
@@ -77,6 +97,17 @@ class DataTableBuilder
     }
 
     /**
+     * Set filters that should be applied.
+     *
+     * Filters should be parsed before being passed to this method.
+     * Use DataTable::parseFilters() to map public filter keys to trusted database columns.
+     *
+     * Format: `column:value`.
+     * Relationship columns may use dot notation.
+     *
+     * Examples: `status:new`, `priority.name:High`, `creator.name:Rafi`.
+     * Special values: `NULL`, `NOT NULL`.
+     *
      * @param array<int, string> $filters
      * @return $this
      */
@@ -88,6 +119,16 @@ class DataTableBuilder
     }
 
     /**
+     * Set date ranges that should be applied.
+     *
+     * The array key is the database column.
+     * The value should contain optional `from` and `to` keys.
+     *
+     * Example:
+     * `created_at => ['from' => '01-01-2026', 'to' => '31-12-2026']`
+     *
+     * The incoming date format is controlled by config `inertia-datatables.date_format`.
+     *
      * @param array<string, array{from?: string, to?: string}> $dateRanges
      * @return $this
      */
@@ -99,6 +140,13 @@ class DataTableBuilder
     }
 
     /**
+     * Set columns that are allowed to be filtered.
+     *
+     * This prevents request-provided filters from leaking unwanted database columns
+     * or relations.
+     *
+     * Examples: `status`, `priority.name`, `contact.channel.name`.
+     *
      * @param array<int, string> $allowedFilters
      * @return $this
      */
@@ -110,6 +158,13 @@ class DataTableBuilder
     }
 
     /**
+     * Set the requested sort column.
+     *
+     * This value is usually taken from the configured sort column query parameter.
+     * The column should also be whitelisted using allowedSorts().
+     *
+     * Examples: `name`, `created_at`, `contact.name`.
+     *
      * @return $this
      */
     public function applySort(?string $sort): self
@@ -120,6 +175,13 @@ class DataTableBuilder
     }
 
     /**
+     * Set columns that are allowed to be sorted.
+     *
+     * Normal columns should use the column name.
+     * Relationship columns may use dot notation when supported.
+     *
+     * Examples: `number`, `created_at`, `priority.sla_minutes`, `contact.name`.
+     *
      * @param array<int, string> $allowedSorts
      * @return $this
      */
@@ -131,6 +193,14 @@ class DataTableBuilder
     }
 
     /**
+     * Set the result type.
+     *
+     * Supported types:
+     * - `pagination`
+     * - `collection`
+     *
+     * The default type is `pagination`.
+     *
      * @param 'pagination'|'collection' $type
      * @return $this
      */
@@ -142,6 +212,12 @@ class DataTableBuilder
     }
 
     /**
+     * Set the default order column and direction.
+     *
+     * This is used when no valid requested sort column is provided.
+     *
+     * Examples: `created_at`, `desc`.
+     *
      * @return $this
      */
     public function orderBy(string $column = 'created_at', string $direction = 'desc'): self
@@ -153,6 +229,13 @@ class DataTableBuilder
     }
 
     /**
+     * Set the default number of entries per page.
+     *
+     * This is only used when the result type is `pagination`.
+     * The maximum value is still limited by config `inertia-datatables.pagination.max_per_page`.
+     *
+     * Examples: `10`, `25`, `50`.
+     *
      * @return $this
      */
     public function perPage(int $limit): self

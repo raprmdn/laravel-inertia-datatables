@@ -12,6 +12,7 @@ use Raprmdn\DataTables\DataTableBuilder;
  *
  * @method static DataTableBuilder<TModel> query(EloquentBuilder<TModel>|QueryBuilder $query)
  * @method static array{0: array<int, string>, 1: array<string, array{from?: string, to?: string}>} parseFilters(array $filtersOrMap, array $map = [])
+ * @method static array{0: string|null, 1: array<int, string>} parseSort(?string $sort, array $sortColumns)
  *
  * @see \Raprmdn\DataTables\DataTableManager
  */

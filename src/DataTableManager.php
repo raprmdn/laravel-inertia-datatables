@@ -45,6 +45,23 @@ class DataTableManager
         return FilterParser::parse($filtersOrMap, $map);
     }
 
+    /**
+     * Parse requested sort column into selected sort and allowed sort columns.
+     *
+     * @param array<string, string> $sortColumns
+     * @return array{0: string|null, 1: array<int, string>}
+     */
+    public function parseSort(?string $sort, array $sortColumns): array
+    {
+        $allowedSorts = array_values($sortColumns);
+
+        if (! $sort || ! isset($sortColumns[$sort])) {
+            return [null, $allowedSorts];
+        }
+
+        return [$sortColumns[$sort], $allowedSorts];
+    }
+
     private function configValue(string $key, mixed $default = null): mixed
     {
         if (function_exists('config')) {

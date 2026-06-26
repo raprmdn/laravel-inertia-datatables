@@ -23,9 +23,5 @@ class DataTableServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../config/inertia-datatables.php' => config_path('inertia-datatables.php'),
         ], 'inertia-datatables-config');
-
-        $this->publishes([
-            __DIR__ . '/../stubs/inertia-react' => resource_path('js/components/data-table'),
-        ], 'inertia-datatables-react');
     }
 }
