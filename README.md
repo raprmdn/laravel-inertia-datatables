@@ -1,5 +1,7 @@
 # Laravel Inertia Datatables
 
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/raprmdn/laravel-inertia-datatables.svg?style=flat-square)](https://packagist.org/packages/raprmdn/laravel-inertia-datatables)
+
 > This package is currently in beta. It is usable, but the public API may still change before `v1.0.0`.
 
 `raprmdn/laravel-inertia-datatables` is a Laravel server-side datatable query builder. The current core package is backend-only and can be used with Inertia, API resources, Blade, or any Laravel response.
