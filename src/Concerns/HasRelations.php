@@ -4,14 +4,8 @@ namespace Raprmdn\DataTables\Concerns;
 
 trait HasRelations
 {
-    /**
-     * @var array<int, string>
-     */
     protected array $relationships = [];
 
-    /**
-     * @var array<int, string>
-     */
     protected array $relationshipCounts = [];
 
     protected function relations()

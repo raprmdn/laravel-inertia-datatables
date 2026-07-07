@@ -6,20 +6,12 @@ use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use InvalidArgumentException;
 
-/**
- * @template TModel of \Illuminate\Database\Eloquent\Model
- */
 trait HasDataTable
 {
-    /**
-     * @var EloquentBuilder<TModel>|QueryBuilder
-     */
     protected EloquentBuilder|QueryBuilder $query;
 
     /**
      * Execute the datatable query.
-     *
-     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Database\Eloquent\Collection<int, TModel>|\Illuminate\Support\Collection<int, mixed>
      */
     public function make()
     {

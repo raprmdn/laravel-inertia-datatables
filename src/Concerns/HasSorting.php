@@ -14,9 +14,6 @@ trait HasSorting
     protected string $direction = 'desc';
     protected ?string $sort = null;
 
-    /**
-     * @var array<int, string>
-     */
     protected array $allowedSorts = [];
 
     protected function sort()

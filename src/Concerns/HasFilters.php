@@ -8,24 +8,12 @@ use InvalidArgumentException;
 
 trait HasFilters
 {
-    /**
-     * @var array<int, string>
-     */
     protected array $filters = [];
 
-    /**
-     * @var array<int, string>
-     */
     protected array $allowedFilters = [];
 
-    /**
-     * @var array<int, string>
-     */
     protected array $jsonColumns = [];
 
-    /**
-     * @var array<string, array{from?: string, to?: string}>
-     */
     protected array $dateRanges = [];
 
     protected function filter()

@@ -13,12 +13,8 @@ use Raprmdn\DataTables\Concerns\HasRelations;
 use Raprmdn\DataTables\Concerns\HasSearch;
 use Raprmdn\DataTables\Concerns\HasSorting;
 
-/**
- * @template TModel of \Illuminate\Database\Eloquent\Model
- */
 class DataTableBuilder
 {
-    /** @use HasDataTable<TModel> */
     use HasDataTable;
     use HasRelations;
     use HasSearch;
@@ -34,9 +30,6 @@ class DataTableBuilder
 
     /**
      * Which query to use for the data table.
-     *
-     * @param EloquentBuilder<TModel>|QueryBuilder $query
-     * @return $this
      */
     public function query(EloquentBuilder|QueryBuilder $query): self
     {
@@ -52,9 +45,6 @@ class DataTableBuilder
      * Nested relationships may use dot notation, for example `contact.channel`.
      *
      * Examples: `channel`, `createdBy`, `contact.channel`.
-     *
-     * @param array<int, string> $relationships
-     * @return $this
      */
     public function with(array $relationships): self
     {
@@ -67,9 +57,6 @@ class DataTableBuilder
      * Set relationship counts that should be eager loaded.
      *
      * Examples: `tickets`, `comments`.
-     *
-     * @param array<int, string> $relationships
-     * @return $this
      */
     public function withCount(array $relationships): self
     {
@@ -85,9 +72,6 @@ class DataTableBuilder
      * Relationship columns should use dot notation.
      *
      * Examples: `name`, `email`, `contact.name`, `reason.parent.name`.
-     *
-     * @param array<int, string> $searchable
-     * @return $this
      */
     public function searchable(array $searchable): self
     {
@@ -106,10 +90,7 @@ class DataTableBuilder
      * Relationship columns may use dot notation.
      *
      * Examples: `status:new`, `priority.name:High`, `creator.name:Rafi`.
-     * Special values: `NULL`, `NOT NULL`.
-     *
-     * @param array<int, string> $filters
-     * @return $this
+     * Special values: `NULL`, `NOT NULL`, JSON `filters->status`
      */
     public function applyFilters(array $filters): self
     {
@@ -128,9 +109,6 @@ class DataTableBuilder
      * `created_at => ['from' => '01-01-2026', 'to' => '31-12-2026']`
      *
      * The incoming date format is controlled by config `inertia-datatables.date_format`.
-     *
-     * @param array<string, array{from?: string, to?: string}> $dateRanges
-     * @return $this
      */
     public function applyDateRanges(array $dateRanges): self
     {
@@ -146,9 +124,6 @@ class DataTableBuilder
      * or relations.
      *
      * Examples: `status`, `priority.name`, `contact.channel.name`.
-     *
-     * @param array<int, string> $allowedFilters
-     * @return $this
      */
     public function allowedFilters(array $allowedFilters): self
     {
@@ -164,8 +139,6 @@ class DataTableBuilder
      * The column should also be whitelisted using allowedSorts().
      *
      * Examples: `name`, `created_at`, `contact.name`.
-     *
-     * @return $this
      */
     public function applySort(?string $sort): self
     {
@@ -181,9 +154,6 @@ class DataTableBuilder
      * Relationship columns may use dot notation when supported.
      *
      * Examples: `number`, `created_at`, `priority.sla_minutes`, `contact.name`.
-     *
-     * @param array<int, string> $allowedSorts
-     * @return $this
      */
     public function allowedSorts(array $allowedSorts): self
     {
@@ -200,9 +170,6 @@ class DataTableBuilder
      * - `collection`
      *
      * The default type is `pagination`.
-     *
-     * @param 'pagination'|'collection' $type
-     * @return $this
      */
     public function type(string $type): self
     {
@@ -217,8 +184,6 @@ class DataTableBuilder
      * This is used when no valid requested sort column is provided.
      *
      * Examples: `created_at`, `desc`.
-     *
-     * @return $this
      */
     public function orderBy(string $column = 'created_at', string $direction = 'desc'): self
     {
@@ -235,8 +200,6 @@ class DataTableBuilder
      * The maximum value is still limited by config `inertia-datatables.pagination.max_per_page`.
      *
      * Examples: `10`, `25`, `50`.
-     *
-     * @return $this
      */
     public function perPage(int $limit): self
     {

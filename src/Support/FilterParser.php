@@ -4,11 +4,6 @@ namespace Raprmdn\DataTables\Support;
 
 class FilterParser
 {
-    /**
-     * @param array<int, string> $filters
-     * @param array<string, string> $map
-     * @return array{0: array<int, string>, 1: array<string, array{from?: string, to?: string}>}
-     */
     public static function parse(array $filters, array $map = []): array
     {
         $columnFilters = [];

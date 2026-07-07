@@ -44,8 +44,20 @@ return [
     | JSON Columns
     |--------------------------------------------------------------------------
     |
-    | Columns listed here use whereJsonContains when filtered.
+    | Columns or JSON paths listed here use whereJsonContains when filtered.
+    | Use this for JSON arrays or JSON columns where the selected value should
+    | be checked inside the JSON value.
+    |
+    | Examples:
+    | - 'channels'
+    | - 'filters->reward'
+    |
+    | JSON scalar paths such as 'filters->status' usually do not need to be
+    | listed here because Laravel can filter them with a normal where condition.
     |
     */
-    'json_columns' => [],
+    'json_columns' => [
+        // 'channels',
+        // 'filters->reward',
+    ],
 ];

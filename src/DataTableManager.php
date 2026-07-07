@@ -4,7 +4,6 @@ namespace Raprmdn\DataTables;
 
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Raprmdn\DataTables\Support\FilterParser;
 
@@ -12,11 +11,6 @@ class DataTableManager
 {
     /**
      * Create a new datatable builder instance for the given query.
-     *
-     * @template TModel of Model
-     *
-     * @param EloquentBuilder<TModel>|QueryBuilder $query
-     * @return DataTableBuilder<TModel>
      */
     public function query(EloquentBuilder|QueryBuilder $query): DataTableBuilder
     {
@@ -25,10 +19,6 @@ class DataTableManager
 
     /**
      * Parse request filters into column filters and date ranges.
-     *
-     * @param array<int, string>|array<string, string> $filtersOrMap
-     * @param array<string, string> $map
-     * @return array{0: array<int, string>, 1: array<string, array{from?: string, to?: string}>}
      */
     public function parseFilters(array $filtersOrMap, array $map = []): array
     {
@@ -47,9 +37,6 @@ class DataTableManager
 
     /**
      * Parse requested sort column into selected sort and allowed sort columns.
-     *
-     * @param array<string, string> $sortColumns
-     * @return array{0: string|null, 1: array<int, string>}
      */
     public function parseSort(?string $sort, array $sortColumns): array
     {

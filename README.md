@@ -44,14 +44,17 @@ return [
         'on_each_side'     => 1,
     ],
 
-    'json_columns' => [],
+    'json_columns' => [
+        // 'channels',
+        // 'filters->reward',
+    ],
 ];
 ```
 
 * `query_params`: request query keys used by search, filters, sorting, and pagination.
 * `date_format`: expected incoming date range format.
 * `pagination`: default page size, max page size, and paginator link window.
-* `json_columns`: columns that should use JSON contains filtering.
+* `json_columns`: columns or JSON paths that should use JSON contains filtering with `whereJsonContains`. Use this for JSON arrays, for example `filters->reward`. JSON scalar paths such as `filters->status` can usually be filtered normally.
 
 ## Basic Usage
 
@@ -106,6 +109,64 @@ DataTable::query($query)
 ```
 
 Special filter values: `NULL`, `NOT NULL`.
+
+### JSON Filters
+
+JSON scalar values can be filtered using Laravel JSON path syntax directly in your filter mapping.
+
+```php
+$filterColumns = [
+    'redeem_status' => 'filters->status',
+    'status'        => 'status',
+];
+```
+
+Example request:
+
+```txt
+?filters[]=redeem_status:waiting_confirmation
+```
+
+This is useful for JSON object values like:
+
+```json
+{
+    "status": "waiting_confirmation"
+}
+```
+
+For JSON arrays, add the JSON path to `json_columns` so the filter uses `whereJsonContains`.
+
+```php
+// config/inertia-datatables.php
+'json_columns' => [
+    'filters->reward',
+],
+```
+
+Then map the filter normally:
+
+```php
+$filterColumns = [
+    'reward' => 'filters->reward',
+];
+```
+
+Example request:
+
+```txt
+?filters[]=reward:44
+```
+
+This is useful for JSON array values like:
+
+```json
+{
+    "reward": ["44", "45", "46"]
+}
+```
+
+Use `json_columns` only for JSON columns or JSON paths that need contains matching. JSON scalar paths such as `filters->status` usually do not need to be listed there.
 
 ### Date Range Filters
 

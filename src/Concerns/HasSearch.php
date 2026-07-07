@@ -6,9 +6,6 @@ use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 
 trait HasSearch
 {
-    /**
-     * @var array<int, string>
-     */
     protected array $searchable = [];
 
     protected function search(): void
