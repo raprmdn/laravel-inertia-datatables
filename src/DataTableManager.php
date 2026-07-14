@@ -20,9 +20,13 @@ class DataTableManager
     /**
      * Parse request filters into column filters and date ranges.
      */
-    public function parseFilters(array $filtersOrMap, array $map = []): array
+    public function parseFilters(
+        mixed $filtersOrMap,
+        array $map = [],
+        array $aliases = [],
+    ): array
     {
-        if ($map === [] && ! array_is_list($filtersOrMap)) {
+        if (is_array($filtersOrMap) && $map === [] && ! array_is_list($filtersOrMap)) {
             $map = $filtersOrMap;
             $filterKey = $this->configValue('inertia-datatables.query_params.filters', 'filters');
             $filtersOrMap = $this->requestQuery($filterKey, []);
@@ -32,8 +36,15 @@ class DataTableManager
             $filtersOrMap = [];
         }
 
+        $filters = array_filter($filtersOrMap, 'is_string');
+        $filters = array_map(
+            fn (string $filter): string => $aliases[$filter] ?? $filter,
+            $filters,
+        );
+        $filters = array_values(array_unique($filters));
+
         [$columnFilters, $dateRanges] = FilterParser::parse(
-            $filtersOrMap,
+            $filters,
             $map,
         );
 

@@ -110,6 +110,46 @@ DataTable::query($query)
 
 Special filter values: `NULL`, `NOT NULL`.
 
+### Filter Aliases
+
+Filter column maps convert frontend column names to trusted backend columns. Optional filter aliases convert complete frontend filter expressions before column mapping.
+
+```php
+[$columnFilters, $allowedFilters] = DataTable::parseFilters(
+    request()->query('filters', []),
+    [
+        'status' => 'email_verified_at',
+    ],
+    [
+        'status:verified' => 'status:NOT NULL',
+        'status:unverified' => 'status:NULL',
+    ],
+);
+```
+
+Aliases use exact full-string matching:
+
+```txt
+status:verified
+-> status:NOT NULL
+-> email_verified_at:NOT NULL
+```
+
+Unknown filters remain unchanged. Aliases are useful for nullable states, user-friendly enum labels, and frontend values that differ from stored values.
+
+Map-only shorthand supports aliases through a named argument:
+
+```php
+DataTable::parseFilters(
+    [
+        'status' => 'email_verified_at',
+    ],
+    aliases: [
+        'status:verified' => 'status:NOT NULL',
+    ],
+);
+```
+
 ### JSON Filters
 
 JSON scalar values can be filtered using Laravel JSON path syntax directly in your filter mapping.
@@ -301,7 +341,7 @@ Use Laravel relationship names for eager loading:
 * `applyDateRanges([...])`: apply parsed date ranges.
 * `applySort($column)`: set requested sort column. Accepts `null` to use default ordering.
 * `allowedSorts([...])`: whitelist sort columns.
-* `DataTable::parseFilters($filters, $filterColumns)`: parse request filters into column filters, allowed filters, and date ranges.
+* `DataTable::parseFilters($filters, $filterColumns, $aliases = [])`: parse request filters into column filters, allowed filters, and date ranges.
 * `DataTable::parseSort($column, $sortColumns)`: parse requested sort column and allowed sorts from one mapping.
 * `orderBy($column, $direction)`: set fallback order.
 * `perPage($limit)`: set default pagination limit.
@@ -319,12 +359,13 @@ Use Laravel relationship names for eager loading:
 2. `$allowedFilters` — unique mapped backend columns for `allowedFilters()`.
 3. `$dateRanges` — date range filters for `applyDateRanges()`.
 
-It accepts 2 parameters:
+It accepts raw filters, a column map, and optional exact filter aliases:
 
 ```php
 DataTable::parseFilters(
     $request->query('filters', []),
     $filterColumns,
+    $filterAliases,
 );
 ```
 
