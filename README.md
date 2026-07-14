@@ -97,14 +97,14 @@ $filterColumns = [
     'priority' => 'priority.name',
 ];
 
-[$columnFilters, $dateRanges] = DataTable::parseFilters(
+[$columnFilters, $allowedFilters] = DataTable::parseFilters(
     $request->query('filters', []),
-    $filterColumns
+    $filterColumns,
 );
 
 DataTable::query($query)
     ->applyFilters($columnFilters)
-    ->allowedFilters(array_values($filterColumns))
+    ->allowedFilters($allowedFilters)
     ->make();
 ```
 
@@ -178,19 +178,18 @@ Date range filter keys should end with `_from` and `_to`.
 
 ```php
 $filterColumns = [
-    'status'          => 'status',
-    'created_at_from' => 'created_at_from',
-    'created_at_to'   => 'created_at_to',
+    'status'     => 'status',
+    'created_at' => 'created_at',
 ];
 
-[$columnFilters, $dateRanges] = DataTable::parseFilters(
+[$columnFilters, $allowedFilters, $dateRanges] = DataTable::parseFilters(
     $request->query('filters', []),
-    $filterColumns
+    $filterColumns,
 );
 
 DataTable::query($query)
     ->applyFilters($columnFilters)
-    ->allowedFilters(array_values($filterColumns))
+    ->allowedFilters($allowedFilters)
     ->applyDateRanges($dateRanges)
     ->make();
 ```
@@ -302,7 +301,7 @@ Use Laravel relationship names for eager loading:
 * `applyDateRanges([...])`: apply parsed date ranges.
 * `applySort($column)`: set requested sort column. Accepts `null` to use default ordering.
 * `allowedSorts([...])`: whitelist sort columns.
-* `DataTable::parseFilters($filters, $filterColumns)`: parse request filters into column filters and date ranges.
+* `DataTable::parseFilters($filters, $filterColumns)`: parse request filters into column filters, allowed filters, and date ranges.
 * `DataTable::parseSort($column, $sortColumns)`: parse requested sort column and allowed sorts from one mapping.
 * `orderBy($column, $direction)`: set fallback order.
 * `perPage($limit)`: set default pagination limit.
@@ -317,14 +316,15 @@ Use Laravel relationship names for eager loading:
 `DataTable::parseFilters()` converts request filters into:
 
 1. `$columnFilters` — normal column or relationship filters for `applyFilters()`.
-2. `$dateRanges` — date range filters for `applyDateRanges()`.
+2. `$allowedFilters` — unique mapped backend columns for `allowedFilters()`.
+3. `$dateRanges` — date range filters for `applyDateRanges()`.
 
 It accepts 2 parameters:
 
 ```php
 DataTable::parseFilters(
     $request->query('filters', []),
-    $filterColumns
+    $filterColumns,
 );
 ```
 
@@ -332,10 +332,9 @@ Example filter mapping:
 
 ```php
 $filterColumns = [
-    'status'          => 'status',
-    'channel'         => 'contact.channel.name',
-    'created_at_from' => 'created_at_from',
-    'created_at_to'   => 'created_at_to',
+    'status'     => 'status',
+    'channel'    => 'contact.channel.name',
+    'created_at' => 'created_at',
 ];
 ```
 
@@ -351,9 +350,9 @@ Example request:
 Usage:
 
 ```php
-[$columnFilters, $dateRanges] = DataTable::parseFilters(
+[$columnFilters, $allowedFilters, $dateRanges] = DataTable::parseFilters(
     $request->query('filters', []),
-    $filterColumns
+    $filterColumns,
 );
 ```
 
@@ -363,6 +362,12 @@ Result:
 $columnFilters = [
     'status:closed',
     'contact.channel.name:Instagram',
+];
+
+$allowedFilters = [
+    'status',
+    'contact.channel.name',
+    'created_at',
 ];
 
 $dateRanges = [
@@ -378,7 +383,7 @@ Then pass the result to the DataTable:
 ```php
 DataTable::query($query)
     ->applyFilters($columnFilters)
-    ->allowedFilters(array_values($filterColumns))
+    ->allowedFilters($allowedFilters)
     ->applyDateRanges($dateRanges)
     ->make();
 ```
@@ -462,20 +467,19 @@ public function show(Request $request, Contact $contact)
     $query = Ticket::query()->where('contact_id', $contact->id);
 
     $filterColumns = [
-        'status'          => 'status',
-        'priority'        => 'priority.name',
-        'channel'         => 'contact.channel.name',
-        'reason_type'     => 'reason.parent.name',
-        'department'      => 'department.name',
-        'assigned'        => 'assignedTo.name',
-        'created_by'      => 'creator.name',
-        'created_at_from' => 'created_at_from',
-        'created_at_to'   => 'created_at_to',
+        'status'      => 'status',
+        'priority'    => 'priority.name',
+        'channel'     => 'contact.channel.name',
+        'reason_type' => 'reason.parent.name',
+        'department'  => 'department.name',
+        'assigned'    => 'assignedTo.name',
+        'created_by'  => 'creator.name',
+        'created_at'  => 'created_at',
     ];
 
-    [$columnFilters, $dateRanges] = DataTable::parseFilters(
+    [$columnFilters, $allowedFilters, $dateRanges] = DataTable::parseFilters(
         $request->query('filters', []),
-        $filterColumns
+        $filterColumns,
     );
 
     $sortColumns = [
@@ -520,7 +524,7 @@ public function show(Request $request, Contact $contact)
         ->applySort($sort)
         ->allowedSorts($allowedSorts)
         ->applyFilters($columnFilters)
-        ->allowedFilters(array_values($filterColumns))
+        ->allowedFilters($allowedFilters)
         ->applyDateRanges($dateRanges)
         ->make();
 
@@ -560,6 +564,31 @@ Route::get('/users', function (Request $request) {
 
     return UserResource::collection($users);
 });
+```
+
+## Upgrading To v0.3.0
+
+`v0.3.0` changes the second value returned by `DataTable::parseFilters()`. This is a breaking API change.
+
+Before:
+
+```php
+[$columnFilters, $dateRanges] =
+    DataTable::parseFilters($filters, $map);
+```
+
+After, without date ranges:
+
+```php
+[$columnFilters, $allowedFilters] =
+    DataTable::parseFilters($filters, $map);
+```
+
+After, with date ranges:
+
+```php
+[$columnFilters, $allowedFilters, $dateRanges] =
+    DataTable::parseFilters($filters, $map);
 ```
 
 ## Inertia React Components

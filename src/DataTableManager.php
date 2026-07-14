@@ -32,7 +32,18 @@ class DataTableManager
             $filtersOrMap = [];
         }
 
-        return FilterParser::parse($filtersOrMap, $map);
+        [$columnFilters, $dateRanges] = FilterParser::parse(
+            $filtersOrMap,
+            $map,
+        );
+
+        $allowedFilters = array_values(array_unique($map));
+
+        return [
+            $columnFilters,
+            $allowedFilters,
+            $dateRanges,
+        ];
     }
 
     /**
