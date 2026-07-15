@@ -68,6 +68,12 @@ $users = DataTable::query(User::query())
     ->make();
 ```
 
+## Demo
+
+A complete Laravel + Inertia React example application demonstrating this package is available here:
+
+Repository: https://github.com/raprmdn/laravel-inertia-datatable / https://raprmdn.dev/projects/laravel-inertia-datatable
+
 ## Query Parameters
 
 ### Search
