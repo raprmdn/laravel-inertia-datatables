@@ -362,12 +362,34 @@ Nested relationships are also supported:
 * `parent` → relationship on `Reason`
 * `name` → column in the parent relation table.
 
-Use Laravel relationship names for eager loading:
+Use Laravel relationship names for eager loading. Both methods accept a single
+relation string:
+
+```php
+->with('contact.channel')
+->withCount('tickets')
+```
+
+Indexed arrays, nested relations, and constrained relation definitions remain
+supported:
 
 ```php
 ->with(['contact.channel', 'priority'])
-->withCount(['tickets'])
+->withCount(['tickets', 'comments'])
+
+->with([
+    'comments' => fn ($query) => $query->latest()->limit(5),
+])
+->withCount([
+    'comments' => fn ($query) => $query->where('approved', true),
+])
 ```
+
+Repeated calls accumulate relations. Duplicate plain names are retained once,
+and the latest constrained definition replaces an earlier constraint for the
+same exact relation. A constrained definition remains authoritative over a
+plain duplicate regardless of call order. Empty or whitespace-only relation
+names throw `InvalidArgumentException`; empty arrays are no-ops.
 
 Relation sorting supports `BelongsTo` and `HasOne`, including self-referencing relations. Sorting `HasMany` or `BelongsToMany` relations throws `InvalidArgumentException` because one related row cannot be selected unambiguously.
 
@@ -396,8 +418,8 @@ For nested Query Builder sort paths, the package converts relation segments to a
 ## Available Methods
 
 * `query($query)`: set the Eloquent or query builder instance.
-* `with([...])`: eager load relationships.
-* `withCount([...])`: eager load relationship counts.
+* `with(string|array $relationships)`: add relationships to eager load.
+* `withCount(string|array $relationships)`: add relationship counts to eager load.
 * `searchable([...])`: set searchable columns and relation columns.
 * `applyFilters([...])`: apply parsed filters.
 * `allowedFilters([...])`: whitelist filter columns.
@@ -718,8 +740,6 @@ The package uses PHPUnit through Orchestra Testbench. SQLite `:memory:` is the l
 composer test
 vendor/bin/phpunit
 ```
-
-The GitHub Actions workflow validates Composer metadata, the Laravel/PHP/Testbench matrix above, and representative MySQL 8.0 and PostgreSQL 16 jobs. Remote workflow results must be checked on GitHub; this README does not claim they have passed yet.
 
 ## Known Limitations
 

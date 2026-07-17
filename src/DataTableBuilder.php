@@ -39,28 +39,36 @@ class DataTableBuilder
     }
 
     /**
-     * Set relationships that should be eager loaded.
+     * Add relationships that should be eager loaded.
      *
-     * The format should be `relationship`.
+     * Accepts one relationship or an indexed or constrained array.
      * Nested relationships may use dot notation, for example `contact.channel`.
+     *
+     * @param  array<array-key, array|\Closure|string>|string  $relationships
+     * @return $this
      *
      * Examples: `channel`, `createdBy`, `contact.channel`.
      */
-    public function with(array $relationships): self
+    public function with(string|array $relationships): self
     {
-        $this->relationships = $relationships;
+        $this->relationships = $this->mergeRelationships($this->relationships, $relationships);
 
         return $this;
     }
 
     /**
-     * Set relationship counts that should be eager loaded.
+     * Add relationship counts that should be eager loaded.
+     *
+     * Accepts one relationship or an indexed or constrained array.
+     *
+     * @param  array<array-key, array|\Closure|string>|string  $relationships
+     * @return $this
      *
      * Examples: `tickets`, `comments`.
      */
-    public function withCount(array $relationships): self
+    public function withCount(string|array $relationships): self
     {
-        $this->relationshipCounts = $relationships;
+        $this->relationshipCounts = $this->mergeRelationships($this->relationshipCounts, $relationships);
 
         return $this;
     }
