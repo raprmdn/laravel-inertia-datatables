@@ -2,28 +2,20 @@
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/raprmdn/laravel-inertia-datatables.svg?style=flat-square)](https://packagist.org/packages/raprmdn/laravel-inertia-datatables)
 
-> This package is currently in beta. It is usable, but the public API may still change before `v1.0.0`.
+> This package is currently in beta. It is usable, but the public API may still
+> change before `v1.0.0`.
 
-`raprmdn/laravel-inertia-datatables` is a Laravel server-side datatable query builder. The current core package is backend-only and can be used with Inertia, API resources, Blade, or any Laravel response.
+## Introduction
 
-Inertia React starter components remain planned future work. No React components, frontend runtime, or npm package are currently shipped.
+`raprmdn/laravel-inertia-datatables` is a Laravel server-side datatable query
+builder. It provides searching, allowlisted filters and sorting, relation
+support, validated date ranges, pagination, and collection output without tying
+the backend to one presentation layer.
 
-## Compatibility
-
-The package supports Laravel 10 through 13 on PHP versions allowed by each Laravel release and the package's PHP `^8.2` requirement.
-
-| Laravel | Testbench | PHP tested by CI workflow |
-| --- | --- | --- |
-| 10 | 8 | 8.2 |
-| 11 | 9 | 8.2 |
-| 12 | 10 | 8.2 |
-| 13 | 11 | 8.3 and 8.5 |
-
-SQLite `:memory:` is the default local test database. The CI workflow also defines representative full-suite jobs for MySQL 8.0 and PostgreSQL 16.
-
-> The workflow is implemented, but remote GitHub Actions and database service jobs have not yet been verified on GitHub.
-
-Laravel 10 and 11 are retained for declared compatibility but are end-of-life. Their CI dependency-resolution jobs allow Composer to install advisory-affected framework versions; this does not claim ongoing framework security support.
+The package is backend-only and works with Inertia, API resources, Blade, or any
+other Laravel response. Optional Inertia React starter components are planned
+but are not currently shipped. There is no required frontend runtime or npm
+package.
 
 ## Installation
 
@@ -31,19 +23,27 @@ Laravel 10 and 11 are retained for declared compatibility but are end-of-life. T
 composer require raprmdn/laravel-inertia-datatables
 ```
 
-## Publish Config
+## Publishing Configuration
 
 ```bash
 php artisan vendor:publish --tag=inertia-datatables-config
 ```
 
-Published file:
+## Quick Start
 
-```txt
-config/inertia-datatables.php
+```php
+use App\Models\User;
+use Raprmdn\DataTables\Facades\DataTable;
+
+$users = DataTable::query(User::query())
+    ->searchable(['name', 'email'])
+    ->orderBy('created_at', 'desc')
+    ->make();
 ```
 
 ## Configuration
+
+The published configuration contains all request and result defaults:
 
 ```php
 return [
@@ -70,53 +70,71 @@ return [
 ];
 ```
 
-* `query_params`: request query keys used by search, filters, sorting, and pagination. The `column` key is also used by map-only `parseSort()` calls.
-* `date_format`: expected incoming date range format.
-* `pagination`: default page size, max page size, and paginator link window.
-* `json_columns`: columns or JSON paths that should use JSON contains filtering with `whereJsonContains`. Use this for JSON arrays, for example `filters->reward`. JSON scalar paths such as `filters->status` can usually be filtered normally.
+### Query Parameters
 
-## Basic Usage
+`query_params` configures request keys for search, filters, sort column, sort
+direction, and page limit. The `column` and `filters` keys are also used by the
+map-only parser forms.
 
-```php
-use App\Models\User;
-use Raprmdn\DataTables\Facades\DataTable;
+### Date Format
 
-$users = DataTable::query(User::query())
-    ->searchable(['name', 'email'])
-    ->orderBy('created_at', 'desc')
-    ->make();
-```
+`date_format` is passed to Carbon when parsing date ranges. Validation is strict
+about parser errors, warnings, invalid calendar dates, and overflow dates.
+Carbon does not enforce exact field width, so `1-1-2026` is accepted by the
+default `d-m-Y` parser.
 
-## Demo
+### Pagination
 
-A complete Laravel + Inertia React example application demonstrating this package is available here:
+`default_per_page` sets the fallback page size, `max_per_page` caps the final
+request limit, and `on_each_side` controls the paginator link window.
 
-Repository: https://github.com/raprmdn/laravel-inertia-datatable / https://raprmdn.dev/projects/laravel-inertia-datatable
+### JSON Columns
 
-## Query Parameters
+`json_columns` lists JSON columns or paths that should use
+`whereJsonContains()`, normally for JSON arrays. Scalar JSON paths usually use
+ordinary equality filtering.
 
-### Search
+## Searching
 
-```txt
+The configured search query parameter defaults to `search`:
+
+```text
 ?search=raprmdn
 ```
 
+### Basic Columns
+
 ```php
-->searchable(['name', 'email', 'contact.name'])
+->searchable(['name', 'email'])
 ```
 
-Searchable columns are trusted developer-defined identifiers, not request-provided column names. Search values use query bindings.
+Searchable columns are trusted developer-defined identifiers. The request value
+is lowercased, wrapped in `%`, and passed through query bindings. Searchable
+columns are OR-grouped inside one parenthesized condition, preserving existing
+query constraints. An empty column list or search value leaves the query
+unchanged.
 
-### Filters
+### Relation Columns
 
-```txt
+Eloquent relations use dot notation, including nested paths:
+
+```php
+->searchable(['number', 'contact.name', 'reason.parent.name'])
+```
+
+For Query Builder, dotted strings are SQL table or alias references rather than
+Eloquent relationships.
+
+## Filtering
+
+### Basic Filters
+
+Filters use `column:value` expressions through the configured `filters` request
+key:
+
+```text
 ?filters[]=status:new&filters[]=priority:High
 ```
-
-Filters use a mapping where:
-
-* **Key** is the filter name received from the request.
-* **Value** is the database column or relationship column.
 
 ```php
 $filterColumns = [
@@ -129,74 +147,93 @@ $filterColumns = [
     $filterColumns,
 );
 
-DataTable::query($query)
+$result = DataTable::query($query)
     ->applyFilters($columnFilters)
     ->allowedFilters($allowedFilters)
     ->make();
 ```
 
-Special filter values: `NULL`, `NOT NULL`.
+Values for the same column are OR-grouped. Different columns are applied as
+separate AND groups. Values use query bindings.
 
-Request-controlled filter columns must pass through `allowedFilters()`. Values use query bindings. Filters are split on the first colon, so values containing additional colons are preserved. Unknown parsed filters remain in parser output but are ignored during query application unless their mapped column is allowlisted.
+### Allowed Filters
+
+Parsed request filters must be paired with `allowedFilters()`. Expressions whose
+column is not in the allowlist are ignored during query application. Parsing a
+request does not make arbitrary request-provided columns safe automatically.
+
+### Filter Mapping
+
+Map request-facing names to trusted database or Eloquent relation columns:
+
+```php
+$filterColumns = [
+    'status'     => 'status',
+    'priority'   => 'priority.name',
+    'created_at' => 'created_at',
+];
+```
+
+The map values become the unique `$allowedFilters` output.
 
 ### Filter Aliases
 
-Filter column maps convert frontend column names to trusted backend columns. Optional filter aliases convert complete frontend filter expressions before column mapping.
+Aliases replace complete frontend filter expressions before column mapping:
 
 ```php
 [$columnFilters, $allowedFilters] = DataTable::parseFilters(
     request()->query('filters', []),
+    ['status' => 'email_verified_at'],
     [
-        'status' => 'email_verified_at',
-    ],
-    [
-        'status:verified' => 'status:NOT NULL',
+        'status:verified'   => 'status:NOT NULL',
         'status:unverified' => 'status:NULL',
     ],
 );
 ```
 
-Aliases use exact full-string matching:
+Alias matching uses the exact full string:
 
-```txt
+```text
 status:verified
 -> status:NOT NULL
 -> email_verified_at:NOT NULL
 ```
 
-Unknown filters remain unchanged. Aliases are useful for nullable states, user-friendly enum labels, and frontend values that differ from stored values.
-
-Map-only shorthand supports aliases through a named argument:
+Unknown aliases leave the filter unchanged. Aliases do not add columns to the
+allowlist. In map-only form, pass aliases by name:
 
 ```php
-DataTable::parseFilters(
-    [
-        'status' => 'email_verified_at',
-    ],
-    aliases: [
-        'status:verified' => 'status:NOT NULL',
-    ],
+[$columnFilters, $allowedFilters] = DataTable::parseFilters(
+    ['status' => 'email_verified_at'],
+    aliases: ['status:verified' => 'status:NOT NULL'],
 );
 ```
 
-### JSON Filters
+### NULL and NOT NULL
 
-JSON scalar values can be filtered using Laravel JSON path syntax directly in your filter mapping.
+The exact values `NULL` and `NOT NULL` produce `whereNull()` and
+`whereNotNull()` conditions:
+
+```text
+?filters[]=status:NULL
+?filters[]=status:NOT NULL
+```
+
+### JSON Scalar Filters
+
+Map JSON object values with Laravel arrow syntax:
 
 ```php
 $filterColumns = [
     'redeem_status' => 'filters->status',
-    'status'        => 'status',
 ];
 ```
 
-Example request:
-
-```txt
+```text
 ?filters[]=redeem_status:waiting_confirmation
 ```
 
-This is useful for JSON object values like:
+This filters object data such as:
 
 ```json
 {
@@ -204,7 +241,9 @@ This is useful for JSON object values like:
 }
 ```
 
-For JSON arrays, add the JSON path to `json_columns` so the filter uses `whereJsonContains`.
+### JSON Array Filters
+
+Add array paths to `json_columns` so filtering uses `whereJsonContains()`:
 
 ```php
 // config/inertia-datatables.php
@@ -213,21 +252,17 @@ For JSON arrays, add the JSON path to `json_columns` so the filter uses `whereJs
 ],
 ```
 
-Then map the filter normally:
+Map and request the filter normally:
 
 ```php
-$filterColumns = [
-    'reward' => 'filters->reward',
-];
+$filterColumns = ['reward' => 'filters->reward'];
 ```
 
-Example request:
-
-```txt
+```text
 ?filters[]=reward:44
 ```
 
-This is useful for JSON array values like:
+This supports array data such as:
 
 ```json
 {
@@ -235,148 +270,221 @@ This is useful for JSON array values like:
 }
 ```
 
-Use `json_columns` only for JSON columns or JSON paths that need contains matching. JSON scalar paths such as `filters->status` usually do not need to be listed there.
-
 ### Date Range Filters
 
-```txt
-?filters[]=created_at_from:01-01-2026&filters[]=created_at_to:31-12-2026
+Date keys end in `_from` and `_to`:
+
+```text
+?filters[]=created_at_from:01-01-2026
+&filters[]=created_at_to:31-12-2026
 ```
 
-Date range filter keys should end with `_from` and `_to`.
-
 ```php
-$filterColumns = [
-    'status'     => 'status',
-    'created_at' => 'created_at',
-];
-
 [$columnFilters, $allowedFilters, $dateRanges] = DataTable::parseFilters(
     $request->query('filters', []),
-    $filterColumns,
+    ['created_at' => 'created_at'],
 );
 
-DataTable::query($query)
+$result = DataTable::query($query)
     ->applyFilters($columnFilters)
     ->allowedFilters($allowedFilters)
     ->applyDateRanges($dateRanges)
     ->make();
 ```
 
-Date input must strictly match `inertia-datatables.date_format`. Invalid formats and overflow dates such as `31-02-2026` throw `InvalidArgumentException` instead of being normalized.
+Only allowlisted date-range columns are parsed. Non-empty values use the
+configured Carbon format; parser errors, warnings, invalid calendar dates,
+non-string values, and overflow dates throw `InvalidArgumentException`. Carbon
+does not enforce exact field width. Unapproved date columns are ignored. Either
+boundary may be omitted. `from` is inclusive from midnight. `to` includes the
+entire selected calendar day through an exclusive next-midnight boundary,
+including fractional-second timestamps.
 
-Partial ranges are supported. `from` is inclusive from the start of its calendar day. `to` includes the entire selected calendar day by using an exclusive next-day boundary internally, so fractional-second timestamps on the final day remain included.
+## Sorting
 
-### Sorting
+### Basic Sorting
 
-```txt
+```text
 ?col=created_at&sort=desc
 ```
 
-Sorting uses a mapping where:
+### Sort Mapping
 
-* **Key** is the column name received from the request.
-* **Value** is the database column or relationship column.
+Map frontend keys to trusted backend columns:
 
 ```php
 $sortColumns = [
-    'name'       => 'name',
-    'email'      => 'email',
-    'created_at' => 'created_at',
+    'name'         => 'name',
+    'organization' => 'organization.name',
+    'created_at'   => 'created_at',
 ];
 
 [$sort, $allowedSorts] = DataTable::parseSort(
     $request->query('col'),
     $sortColumns,
 );
+```
 
-DataTable::query($query)
+### Map-Only Parsing
+
+When the configured column request key should be read automatically:
+
+```php
+[$sort, $allowedSorts] = DataTable::parseSort($sortColumns);
+```
+
+The request key defaults to `col` and is controlled by
+`query_params.column`.
+
+### Allowed Sorts
+
+Pass the mapped allowlist to the builder:
+
+```php
+$result = DataTable::query($query)
     ->applySort($sort)
     ->allowedSorts($allowedSorts)
     ->orderBy('created_at', 'desc')
     ->make();
 ```
 
-When the request column name is configured through `inertia-datatables.query_params.column`, use the map-only shorthand:
+Unknown, missing, empty, or non-string requested keys produce a `null` sort and
+still return the unique backend allowlist. Passing `null` to `applySort()` is
+supported.
 
-```php
-[$sort, $allowedSorts] = DataTable::parseSort($sortColumns);
-```
+### Fallback Ordering
 
-Map-only parsing reads the configured query parameter, rejects non-string request values, maps the selected key, and returns unique allowed backend sort columns.
+`orderBy()` supplies the fallback column and direction when no approved sort is
+selected. The fallback column does not need to appear in `allowedSorts()`.
 
-Only `asc` and `desc` directions are valid. Invalid directions safely fall back to the configured default direction. Missing, invalid, or unapproved requested columns use the fallback `orderBy()` column.
+### Sort Directions
 
-If the requested column is empty or not found in the mapping, `$sort` is `null`. Passing it to `applySort(null)` is supported and uses fallback ordering.
+The configured direction request value is lowercased, so `asc` and `desc` are
+accepted case-insensitively. Other request values use the direction stored by
+`orderBy()`. `orderBy()` does not validate that stored direction immediately;
+the stored value must also be `asc` or `desc` case-insensitively, or Laravel
+throws `InvalidArgumentException` during `make()`.
+
+## Pagination and Result Types
 
 ### Pagination
 
-```txt
+Pagination is the default, equivalent to `type('pagination')`. `make()` returns
+a length-aware paginator, appends current request query parameters, and applies
+the configured link window.
+
+### Per-Page Limits
+
+```text
 ?limit=25
 ```
 
-```php
-DataTable::query($query)
-    ->perPage(25)
-    ->make();
-```
+`perPage(25)` sets the builder fallback. The request value overrides that
+fallback. The final value is clamped between `1` and
+`pagination.max_per_page`.
 
-Use collection output when pagination is not needed:
+### Collection Output
 
 ```php
-DataTable::query($query)
+$result = DataTable::query($query)
     ->type('collection')
     ->make();
 ```
 
-Pagination defaults and maximum limits come from configuration. Collection output is unpaginated and does not apply paginator page-size behavior, even when a limit query parameter is present.
+Collection output is unpaginated and ignores request or configured page-size
+behavior. Eloquent returns models; Query Builder returns plain objects.
 
 ## Relations
 
-Eloquent searching, filtering, date ranges, and supported sorting use relationship columns with **dot notation**.
+### Dot Notation
 
-```php
-'contact.name'
-'priority.sla_minutes'
-'reason.parent.name'
-```
-
-The first part is the **relationship method** defined on your Eloquent model, and the last part is the **column** on the related table.
-
-For example:
+Eloquent search, filtering, date ranges, and supported sorting use relationship
+methods followed by the related column:
 
 ```php
 'contact.name'
 ```
 
-* `contact` → `contact()` relationship defined in the `Ticket` model.
-* `name` → `name` column in the `contacts` table.
+### Nested Relations
 
-Nested relationships are also supported:
+Nested paths include each relationship segment:
 
 ```php
 'reason.parent.name'
 ```
 
-* `reason` → relationship on `Ticket`
-* `parent` → relationship on `Reason`
-* `name` → column in the parent relation table.
+Here `reason` is a relationship on the base model, `parent` is a relationship
+on the related model, and `name` is the final column.
 
-Use Laravel relationship names for eager loading. Both methods accept a single
-relation string:
+### Searching Relations
 
 ```php
-->with('contact.channel')
-->withCount('tickets')
+->searchable(['contact.name', 'reason.parent.name'])
 ```
 
-Indexed arrays, nested relations, and constrained relation definitions remain
-supported:
+### Filtering Relations
+
+```php
+->applyFilters(['priority.name:High'])
+->allowedFilters(['priority.name'])
+```
+
+### Sorting Relations
+
+```php
+->applySort('contact.name')
+->allowedSorts(['contact.name'])
+```
+
+### Supported Sort Relations
+
+Eloquent sorting supports `BelongsTo` and `HasOne`, including nested paths,
+self-referencing `BelongsTo`, and self-referencing `HasOne` relations.
+
+### Unsupported Sort Relations
+
+`HasMany` and `BelongsToMany` sorting is ambiguous and throws
+`InvalidArgumentException`. Missing relation methods and methods that are not
+Eloquent relations also produce deterministic sorting exceptions.
+
+### Eager Loading
+
+Pass one Laravel relationship string or an array:
+
+```php
+->with('contact')
+```
 
 ```php
 ->with(['contact.channel', 'priority'])
-->withCount(['tickets', 'comments'])
+```
 
+### Relation Counts
+
+```php
+->withCount('comments')
+```
+
+```php
+->withCount(['comments', 'tags'])
+```
+
+Laravel count aliases remain supported as exact relationship strings.
+
+### Repeated `with()` Calls
+
+Repeated calls accumulate eager loads. Duplicate plain names are retained once.
+
+### Repeated `withCount()` Calls
+
+Repeated calls accumulate count definitions and deduplicate duplicate plain
+names. Distinct exact aliases remain distinct.
+
+### Constrained Relations
+
+Associative closure constraints are preserved for both methods:
+
+```php
 ->with([
     'comments' => fn ($query) => $query->latest()->limit(5),
 ])
@@ -385,177 +493,216 @@ supported:
 ])
 ```
 
-Repeated calls accumulate relations. Duplicate plain names are retained once,
-and the latest constrained definition replaces an earlier constraint for the
-same exact relation. A constrained definition remains authoritative over a
-plain duplicate regardless of call order. Empty or whitespace-only relation
-names throw `InvalidArgumentException`; empty arrays are no-ops.
+A later constrained definition replaces an earlier constraint for the same
+exact key. A constrained definition remains authoritative over a plain duplicate
+regardless of call order. Nested paths, column-selection syntax, and count
+aliases are compared only by exact string equality.
 
-Relation sorting supports `BelongsTo` and `HasOne`, including self-referencing relations. Sorting `HasMany` or `BelongsToMany` relations throws `InvalidArgumentException` because one related row cannot be selected unambiguously.
+## Query Builder
 
-### Query Builder Columns
+### Supported Behavior
 
-Query Builder instances do not resolve Eloquent relationships. Dotted columns are treated as SQL table or alias references, so callers must add the required joins and aliases themselves.
+Query Builder supports valid SQL columns for searching, allowlisted filters,
+date ranges, sorting, pagination, and collection output. Results are plain
+objects rather than Eloquent models.
+
+### Relationship Limitations
+
+Query Builder does not resolve Eloquent relationship methods. `with()` and
+`withCount()` are no-ops. Dotted search and filter strings are SQL table or
+alias references.
+
+### Manual Joins
+
+Supply every required join before passing the query to the datatable:
 
 ```php
-use Illuminate\Support\Facades\DB;
-
 $query = DB::table('records')
     ->select('records.*')
-    ->join('organizations as organization', 'organization.id', '=', 'records.organization_id');
-
-$result = DataTable::query($query)
-    ->applySort('organization.name')
-    ->allowedSorts(['organization.name'])
-    ->type('collection')
-    ->make();
+    ->leftJoin(
+        'organizations as organization',
+        'organization.id',
+        '=',
+        'records.organization_id',
+    );
 ```
 
-Use qualified columns when joins can make names ambiguous. Explicitly selecting the base table, such as `records.*`, also prevents same-named joined columns from replacing base result properties.
+### Aliases
 
-For nested Query Builder sort paths, the package converts relation segments to an underscore alias. For example, `organization.country.name` orders by `organization_country.name`; the caller must provide that alias.
+The alias in a dotted column must match the alias in the query. For example,
+`organization.name` requires a table or join alias named `organization`.
 
-## Available Methods
+### Qualified Columns
 
-* `query($query)`: set the Eloquent or query builder instance.
-* `with(string|array $relationships)`: add relationships to eager load.
-* `withCount(string|array $relationships)`: add relationship counts to eager load.
-* `searchable([...])`: set searchable columns and relation columns.
-* `applyFilters([...])`: apply parsed filters.
-* `allowedFilters([...])`: whitelist filter columns.
-* `applyDateRanges([...])`: apply parsed date ranges.
-* `applySort($column)`: set requested sort column. Accepts `null` to use default ordering.
-* `allowedSorts([...])`: whitelist sort columns.
-* `DataTable::parseFilters($filters, $filterColumns, $aliases = [])`: parse request filters into column filters, allowed filters, and date ranges.
-* `DataTable::parseSort($column, $sortColumns)`: explicitly parse a requested sort column and allowed sorts from one mapping.
-* `DataTable::parseSort($sortColumns)`: read the configured column query parameter and parse the sort map.
-* `orderBy($column, $direction)`: set fallback order.
-* `perPage($limit)`: set default pagination limit.
-* `type('pagination')`: return paginated results.
-* `type('collection')`: return collection results.
-* `make()`: execute the query.
+Qualify columns whenever joined tables can contain the same names. Selecting
+`records.*` prevents same-named joined columns such as `id`, `name`, or
+`created_at` from replacing base result properties.
 
-## Helper Methods
+### Nested Sort Aliases
 
-### `DataTable::parseFilters()`
+For Query Builder sorting, relation-like path segments are joined with
+underscores. `organization.country.name` orders by
+`organization_country.name`; the caller must create that alias. This conversion
+applies to sorting, while search and filter columns are passed as configured SQL
+references.
 
-`DataTable::parseFilters()` converts request filters into:
+### Complete Example
 
-1. `$columnFilters` — normal column or relationship filters for `applyFilters()`.
-2. `$allowedFilters` — unique mapped backend columns for `allowedFilters()`.
-3. `$dateRanges` — date range filters for `applyDateRanges()`.
+```php
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Raprmdn\DataTables\Facades\DataTable;
 
-It accepts raw filters, a column map, and optional exact filter aliases:
+public function index(Request $request)
+{
+    $query = DB::table('records')
+        ->select('records.*')
+        ->leftJoin(
+            'organizations as organization',
+            'organization.id',
+            '=',
+            'records.organization_id',
+        );
+
+    [$columnFilters, $allowedFilters] = DataTable::parseFilters(
+        $request->query('filters', []),
+        ['status' => 'records.status'],
+    );
+
+    $sortColumns = [
+        'record'       => 'records.name',
+        'organization' => 'organization.name',
+    ];
+
+    [$sort, $allowedSorts] = DataTable::parseSort($sortColumns);
+
+    return DataTable::query($query)
+        ->searchable(['records.name', 'organization.name'])
+        ->applyFilters($columnFilters)
+        ->allowedFilters($allowedFilters)
+        ->applySort($sort)
+        ->allowedSorts($allowedSorts)
+        ->orderBy('records.created_at', 'desc')
+        ->make();
+}
+```
+
+## Parser Helpers
+
+Parser helpers normalize request-facing keys into developer-controlled backend
+columns. They return builder state but do not execute a query.
+
+### `parseFilters()`
+
+Signature:
 
 ```php
 DataTable::parseFilters(
+    mixed $filtersOrMap,
+    array $map = [],
+    array $aliases = [],
+): array
+```
+
+The explicit form receives raw filters, a map, and optional exact aliases:
+
+```php
+[$columnFilters, $allowedFilters, $dateRanges] = DataTable::parseFilters(
     $request->query('filters', []),
     $filterColumns,
     $filterAliases,
 );
 ```
 
-Example filter mapping:
-
-```php
-$filterColumns = [
-    'status'     => 'status',
-    'channel'    => 'contact.channel.name',
-    'created_at' => 'created_at',
-];
-```
-
-Example request:
-
-```text
-?filters[]=status:closed
-&filters[]=channel:Instagram
-&filters[]=created_at_from:01-05-2026
-&filters[]=created_at_to:30-06-2026
-```
-
-Usage:
+The map-only form receives an associative map as its first argument and reads
+the configured filters query parameter:
 
 ```php
 [$columnFilters, $allowedFilters, $dateRanges] = DataTable::parseFilters(
-    $request->query('filters', []),
     $filterColumns,
+    aliases: $filterAliases,
 );
 ```
 
-Result:
+It always returns three positions:
+
+1. `$columnFilters`: normal column or relation expressions for `applyFilters()`.
+2. `$allowedFilters`: unique backend map values for `allowedFilters()`.
+3. `$dateRanges`: mapped `_from` and `_to` values for `applyDateRanges()`.
+
+Callers without date ranges may destructure the first two positions. Exact
+aliases are applied before mapping and deduplication. Alias values do not add
+columns to the allowlist.
+
+Normalization behavior:
+
+- Non-array raw input becomes an empty filter list.
+- Non-string entries are discarded.
+- Duplicate normalized filters are removed in first-occurrence order.
+- Filters split on the first colon, preserving additional colons in values.
+- Expressions without a colon or with an empty column are ignored.
+- Unknown well-formed filters remain in `$columnFilters`, but cannot reach SQL
+  without a matching builder allowlist entry.
+- `_from` and `_to` suffixes become mapped date range entries.
+- JSON paths remain normal mapped columns; `json_columns` controls containment.
+
+Complete example:
+
+```text
+?filters[]=status:verified
+&filters[]=priority:High
+&filters[]=created_at_from:01-01-2026
+&filters[]=created_at_to:31-01-2026
+```
+
+```php
+$filterColumns = [
+    'status'     => 'email_verified_at',
+    'priority'   => 'priority.name',
+    'created_at' => 'created_at',
+];
+
+[$columnFilters, $allowedFilters, $dateRanges] = DataTable::parseFilters(
+    $request->query('filters', []),
+    $filterColumns,
+    ['status:verified' => 'status:NOT NULL'],
+);
+```
+
+Expected output:
 
 ```php
 $columnFilters = [
-    'status:closed',
-    'contact.channel.name:Instagram',
+    'email_verified_at:NOT NULL',
+    'priority.name:High',
 ];
 
 $allowedFilters = [
-    'status',
-    'contact.channel.name',
+    'email_verified_at',
+    'priority.name',
     'created_at',
 ];
 
 $dateRanges = [
     'created_at' => [
-        'from' => '01-05-2026',
-        'to'   => '30-06-2026',
+        'from' => '01-01-2026',
+        'to'   => '31-01-2026',
     ],
 ];
 ```
 
-Then pass the result to the DataTable:
+### `parseSort()`
 
-```php
-DataTable::query($query)
-    ->applyFilters($columnFilters)
-    ->allowedFilters($allowedFilters)
-    ->applyDateRanges($dateRanges)
-    ->make();
-```
-
-### `DataTable::parseSort()`
-
-`DataTable::parseSort()` converts a request sort key into:
-
-1. `$sort` — selected database or relationship column for `applySort()`.
-2. `$allowedSorts` — allowed sortable columns for `allowedSorts()`.
-
-It supports explicit request input:
+Signature:
 
 ```php
 DataTable::parseSort(
-    $request->query('col'),
-    $sortColumns,
-);
+    mixed $sort,
+    array $sortColumns = [],
+): array
 ```
 
-It also supports configured map-only input:
-
-```php
-DataTable::parseSort($sortColumns);
-```
-
-The map-only form reads `inertia-datatables.query_params.column`.
-
-Example sort mapping:
-
-```php
-$sortColumns = [
-    'ticket'   => 'number',
-    'channel'  => 'contact.channel.name',
-    'priority' => 'priority.sla_minutes',
-];
-```
-
-Example request:
-
-```text
-?col=channel&sort=asc
-```
-
-Usage:
+The explicit form receives a requested frontend key and a map:
 
 ```php
 [$sort, $allowedSorts] = DataTable::parseSort(
@@ -564,28 +711,87 @@ Usage:
 );
 ```
 
-Result:
+The map-only form receives the associative map as its first argument and reads
+`query_params.column`:
 
 ```php
-$sort = 'contact.channel.name';
+[$sort, $allowedSorts] = DataTable::parseSort($sortColumns);
+```
 
-$allowedSorts = [
-    'number',
-    'contact.channel.name',
-    'priority.sla_minutes',
+It returns a mapped backend column or `null`, plus unique backend map values in
+first-occurrence order. Missing, empty, non-string, and unknown requested keys
+produce `null`. Passing `null` to `applySort()` activates fallback ordering.
+
+Complete example:
+
+```text
+?col=organization&sort=asc
+```
+
+```php
+$sortColumns = [
+    'name'         => 'name',
+    'organization' => 'organization.name',
+    'created_at'   => 'created_at',
 ];
+
+[$sort, $allowedSorts] = DataTable::parseSort(
+    $request->query('col'),
+    $sortColumns,
+);
 ```
 
-Then pass the result to the DataTable:
+Expected output:
 
 ```php
-DataTable::query($query)
-    ->applySort($sort)
-    ->allowedSorts($allowedSorts)
-    ->make();
+$sort = 'organization.name';
+$allowedSorts = ['name', 'organization.name', 'created_at'];
 ```
 
-## Example Inertia Controller
+The parser maps only the column. During `make()`, the builder reads and
+normalizes the direction request value.
+
+## API Reference
+
+The facade resolves `DataTableManager`. Each `DataTable::query()` call returns a
+fresh `DataTableBuilder`, so state does not leak between query chains. Except
+for constructors, lifecycle methods, parser helpers, and `make()`, builder
+methods return the same builder for fluent chaining.
+
+### Manager Methods
+
+| Method | Purpose and return behavior |
+| --- | --- |
+| `DataTable::query(EloquentBuilder\|QueryBuilder $query): DataTableBuilder` | Creates a fresh builder and sets its query. Supports both query types. |
+| `DataTable::parseFilters(mixed $filtersOrMap, array $map = [], array $aliases = []): array` | Returns column filters, allowed filters, and date ranges without executing a query. |
+| `DataTable::parseSort(mixed $sort, array $sortColumns = []): array` | Returns a mapped sort or `null` and unique allowed sorts without executing a query. |
+
+### Builder Methods
+
+| Method | State and behavior | Query applicability |
+| --- | --- | --- |
+| `__construct()` | Initializes pagination fallback and configured JSON paths. Prefer `DataTable::query()`. | No query yet |
+| `query(EloquentBuilder\|QueryBuilder $query): self` | Replaces the stored query. | Both |
+| `with(string\|array $relationships): self` | Accumulates, deduplicates, validates, and stores eager loads. | Eloquent; Query Builder no-op at execution |
+| `withCount(string\|array $relationships): self` | Accumulates, deduplicates, validates, and stores relation counts. | Eloquent; Query Builder no-op at execution |
+| `searchable(array $searchable): self` | Replaces searchable columns. | Both; dotted semantics differ |
+| `applyFilters(array $filters): self` | Replaces filter expressions. | Both; requires matching allowlist |
+| `allowedFilters(array $allowedFilters): self` | Replaces the trusted filter and date allowlist. | Both |
+| `applyDateRanges(array $dateRanges): self` | Replaces date range state and validates values during `make()`. | Both; dotted Eloquent paths use relations |
+| `applySort(?string $sort): self` | Replaces the selected backend sort; `null` uses fallback ordering. | Both |
+| `allowedSorts(array $allowedSorts): self` | Replaces the trusted sort allowlist. | Both |
+| `orderBy(string $column = 'created_at', string $direction = 'desc'): self` | Replaces fallback ordering. | Both; dotted semantics differ |
+| `perPage(int $limit): self` | Replaces the fallback page size. Request and maximum limits still apply. | Pagination for both |
+| `type(string $type): self` | Replaces result type; valid values are `pagination` and `collection`. | Both |
+| `make()` | Applies state and executes the query. | Both |
+
+## Examples
+
+The complete Laravel + Inertia React demo application is available at the
+[demo repository](https://github.com/raprmdn/laravel-inertia-datatable) and
+[project page](https://raprmdn.dev/projects/laravel-inertia-datatable).
+
+### Inertia Controller
 
 ```php
 use App\Http\Resources\ContactResource;
@@ -598,8 +804,6 @@ use Raprmdn\DataTables\Facades\DataTable;
 public function show(Request $request, Contact $contact)
 {
     $contact->load(['channel', 'createdBy']);
-
-    $query = Ticket::query()->where('contact_id', $contact->id);
 
     $filterColumns = [
         'status'      => 'status',
@@ -635,14 +839,15 @@ public function show(Request $request, Contact $contact)
         $sortColumns,
     );
 
-    $tickets = DataTable::query($query)
+    $tickets = DataTable::query(
+        Ticket::query()->where('contact_id', $contact->id),
+    )
         ->with([
             'priority',
             'assignedTo',
             'contact.channel',
             'department',
             'reason.parent',
-            'reason',
             'subReason',
             'creator',
             'updater',
@@ -656,11 +861,11 @@ public function show(Request $request, Contact $contact)
             'contact.email',
             'contact.phone',
         ])
-        ->applySort($sort)
-        ->allowedSorts($allowedSorts)
         ->applyFilters($columnFilters)
         ->allowedFilters($allowedFilters)
         ->applyDateRanges($dateRanges)
+        ->applySort($sort)
+        ->allowedSorts($allowedSorts)
         ->make();
 
     return inertia('contact/show', [
@@ -670,7 +875,7 @@ public function show(Request $request, Contact $contact)
 }
 ```
 
-## API Example
+### API Resource
 
 ```php
 use App\Http\Resources\UserResource;
@@ -701,40 +906,7 @@ Route::get('/users', function (Request $request) {
 });
 ```
 
-## Upgrading To v0.3.0
-
-`v0.3.0` changes the second value returned by `DataTable::parseFilters()`. This is a breaking API change.
-
-Before:
-
-```php
-[$columnFilters, $dateRanges] =
-    DataTable::parseFilters($filters, $map);
-```
-
-After, without date ranges:
-
-```php
-[$columnFilters, $allowedFilters] =
-    DataTable::parseFilters($filters, $map);
-```
-
-After, with date ranges:
-
-```php
-[$columnFilters, $allowedFilters, $dateRanges] =
-    DataTable::parseFilters($filters, $map);
-```
-
-## Inertia React Components
-
-This package currently focuses on the Laravel backend query builder.
-
-Publishable Inertia React starter components are planned for a future release. Until that release, you can use this package with your own Inertia, React, Vue, Blade, or API frontend.
-
 ## Testing
-
-The package uses PHPUnit through Orchestra Testbench. SQLite `:memory:` is the local default.
 
 ```bash
 composer test
@@ -743,30 +915,19 @@ vendor/bin/phpunit
 
 ## Known Limitations
 
-* Beta release, API may change.
-* Inertia React components are planned but not part of the current beta release.
-* String column and relation names inside arrays may not get perfect IDE autocomplete.
-* Relation sorting supports `BelongsTo` and `HasOne`; `HasMany` and `BelongsToMany` throw `InvalidArgumentException`.
-* Query Builder relation joins and aliases must be supplied by the caller.
-* Advanced filter operators are not implemented yet.
+- The package is beta and its public API may change before `v1.0.0`.
+- Inertia React starter components are planned but not shipped.
+- String column and relation names may not receive perfect IDE autocomplete.
+- Relation sorting supports `BelongsTo` and `HasOne`, not `HasMany` or `BelongsToMany`.
+- Query Builder joins and aliases must be supplied by the caller.
+- Advanced filter operators are not implemented.
 
-## Roadmap
-
-Completed foundation:
-
-* PHPUnit and Orchestra Testbench suite
-* Backend correctness hardening
-* Laravel/PHP and database compatibility workflow
-
-Future work:
-
-* More filter operators
-* Optional Inertia React starter components
-* Column definitions API
 
 ## Contributing
 
-Issues and pull requests are welcome while the package is in beta. Keep changes focused and backend-first unless the change is explicitly about planned frontend starter components.
+Issues and pull requests are welcome while the package is in beta. Keep changes
+focused and backend-first. Public API changes require regression tests and
+corresponding README updates.
 
 ## License
 
