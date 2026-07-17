@@ -1,11 +1,16 @@
 {
     "name": "raprmdn/laravel-inertia-datatables",
-    "description": "Laravel server-side data table query builder with optional Inertia React components.",
+    "description": "Laravel server-side datatable query builder for Eloquent and query builder responses.",
     "type": "library",
     "license": "MIT",
     "autoload": {
         "psr-4": {
             "Raprmdn\\DataTables\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
         }
     },
     "extra": {
@@ -34,5 +39,11 @@
         "illuminate/pagination": "^10.0|^11.0|^12.0|^13.0",
         "illuminate/routing": "^10.0|^11.0|^12.0|^13.0",
         "nesbot/carbon": "^2.72|^3.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^8.0|^9.0|^10.0|^11.0"
+    },
+    "scripts": {
+        "test": "@php vendor/bin/phpunit"
     }
 }

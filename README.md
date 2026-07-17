@@ -6,6 +6,25 @@
 
 `raprmdn/laravel-inertia-datatables` is a Laravel server-side datatable query builder. The current core package is backend-only and can be used with Inertia, API resources, Blade, or any Laravel response.
 
+Inertia React starter components remain planned future work. No React components, frontend runtime, or npm package are currently shipped.
+
+## Compatibility
+
+The package supports Laravel 10 through 13 on PHP versions allowed by each Laravel release and the package's PHP `^8.2` requirement.
+
+| Laravel | Testbench | PHP tested by CI workflow |
+| --- | --- | --- |
+| 10 | 8 | 8.2 |
+| 11 | 9 | 8.2 |
+| 12 | 10 | 8.2 |
+| 13 | 11 | 8.3 and 8.5 |
+
+SQLite `:memory:` is the default local test database. The CI workflow also defines representative full-suite jobs for MySQL 8.0 and PostgreSQL 16.
+
+> The workflow is implemented, but remote GitHub Actions and database service jobs have not yet been verified on GitHub.
+
+Laravel 10 and 11 are retained for declared compatibility but are end-of-life. Their CI dependency-resolution jobs allow Composer to install advisory-affected framework versions; this does not claim ongoing framework security support.
+
 ## Installation
 
 ```bash
@@ -51,7 +70,7 @@ return [
 ];
 ```
 
-* `query_params`: request query keys used by search, filters, sorting, and pagination.
+* `query_params`: request query keys used by search, filters, sorting, and pagination. The `column` key is also used by map-only `parseSort()` calls.
 * `date_format`: expected incoming date range format.
 * `pagination`: default page size, max page size, and paginator link window.
 * `json_columns`: columns or JSON paths that should use JSON contains filtering with `whereJsonContains`. Use this for JSON arrays, for example `filters->reward`. JSON scalar paths such as `filters->status` can usually be filtered normally.
@@ -86,6 +105,8 @@ Repository: https://github.com/raprmdn/laravel-inertia-datatable / https://raprm
 ->searchable(['name', 'email', 'contact.name'])
 ```
 
+Searchable columns are trusted developer-defined identifiers, not request-provided column names. Search values use query bindings.
+
 ### Filters
 
 ```txt
@@ -115,6 +136,8 @@ DataTable::query($query)
 ```
 
 Special filter values: `NULL`, `NOT NULL`.
+
+Request-controlled filter columns must pass through `allowedFilters()`. Values use query bindings. Filters are split on the first colon, so values containing additional colons are preserved. Unknown parsed filters remain in parser output but are ignored during query application unless their mapped column is allowlisted.
 
 ### Filter Aliases
 
@@ -240,7 +263,9 @@ DataTable::query($query)
     ->make();
 ```
 
-Date input format is controlled by `inertia-datatables.date_format`.
+Date input must strictly match `inertia-datatables.date_format`. Invalid formats and overflow dates such as `31-02-2026` throw `InvalidArgumentException` instead of being normalized.
+
+Partial ranges are supported. `from` is inclusive from the start of its calendar day. `to` includes the entire selected calendar day by using an exclusive next-day boundary internally, so fractional-second timestamps on the final day remain included.
 
 ### Sorting
 
@@ -262,7 +287,7 @@ $sortColumns = [
 
 [$sort, $allowedSorts] = DataTable::parseSort(
     $request->query('col'),
-    $sortColumns
+    $sortColumns,
 );
 
 DataTable::query($query)
@@ -272,9 +297,17 @@ DataTable::query($query)
     ->make();
 ```
 
-Only `asc` and `desc` directions are valid. Invalid sort columns fallback to the default order.
+When the request column name is configured through `inertia-datatables.query_params.column`, use the map-only shorthand:
 
-If the requested column is empty or not found in the mapping, `$sort` will be `null` and the DataTable will use the default `orderBy()` column.
+```php
+[$sort, $allowedSorts] = DataTable::parseSort($sortColumns);
+```
+
+Map-only parsing reads the configured query parameter, rejects non-string request values, maps the selected key, and returns unique allowed backend sort columns.
+
+Only `asc` and `desc` directions are valid. Invalid directions safely fall back to the configured default direction. Missing, invalid, or unapproved requested columns use the fallback `orderBy()` column.
+
+If the requested column is empty or not found in the mapping, `$sort` is `null`. Passing it to `applySort(null)` is supported and uses fallback ordering.
 
 ### Pagination
 
@@ -296,9 +329,11 @@ DataTable::query($query)
     ->make();
 ```
 
+Pagination defaults and maximum limits come from configuration. Collection output is unpaginated and does not apply paginator page-size behavior, even when a limit query parameter is present.
+
 ## Relations
 
-Searching, filtering, and sorting support relationship columns using **dot notation**.
+Eloquent searching, filtering, date ranges, and supported sorting use relationship columns with **dot notation**.
 
 ```php
 'contact.name'
@@ -334,7 +369,29 @@ Use Laravel relationship names for eager loading:
 ->withCount(['tickets'])
 ```
 
-> **Note:** Relation sorting currently supports `BelongsTo` and `HasOne` relationships. Sorting on ambiguous relationships such as `HasMany` or `BelongsToMany` may throw an exception.
+Relation sorting supports `BelongsTo` and `HasOne`, including self-referencing relations. Sorting `HasMany` or `BelongsToMany` relations throws `InvalidArgumentException` because one related row cannot be selected unambiguously.
+
+### Query Builder Columns
+
+Query Builder instances do not resolve Eloquent relationships. Dotted columns are treated as SQL table or alias references, so callers must add the required joins and aliases themselves.
+
+```php
+use Illuminate\Support\Facades\DB;
+
+$query = DB::table('records')
+    ->select('records.*')
+    ->join('organizations as organization', 'organization.id', '=', 'records.organization_id');
+
+$result = DataTable::query($query)
+    ->applySort('organization.name')
+    ->allowedSorts(['organization.name'])
+    ->type('collection')
+    ->make();
+```
+
+Use qualified columns when joins can make names ambiguous. Explicitly selecting the base table, such as `records.*`, also prevents same-named joined columns from replacing base result properties.
+
+For nested Query Builder sort paths, the package converts relation segments to an underscore alias. For example, `organization.country.name` orders by `organization_country.name`; the caller must provide that alias.
 
 ## Available Methods
 
@@ -348,7 +405,8 @@ Use Laravel relationship names for eager loading:
 * `applySort($column)`: set requested sort column. Accepts `null` to use default ordering.
 * `allowedSorts([...])`: whitelist sort columns.
 * `DataTable::parseFilters($filters, $filterColumns, $aliases = [])`: parse request filters into column filters, allowed filters, and date ranges.
-* `DataTable::parseSort($column, $sortColumns)`: parse requested sort column and allowed sorts from one mapping.
+* `DataTable::parseSort($column, $sortColumns)`: explicitly parse a requested sort column and allowed sorts from one mapping.
+* `DataTable::parseSort($sortColumns)`: read the configured column query parameter and parse the sort map.
 * `orderBy($column, $direction)`: set fallback order.
 * `perPage($limit)`: set default pagination limit.
 * `type('pagination')`: return paginated results.
@@ -442,14 +500,22 @@ DataTable::query($query)
 1. `$sort` — selected database or relationship column for `applySort()`.
 2. `$allowedSorts` — allowed sortable columns for `allowedSorts()`.
 
-It accepts 2 parameters:
+It supports explicit request input:
 
 ```php
 DataTable::parseSort(
     $request->query('col'),
-    $sortColumns
+    $sortColumns,
 );
 ```
+
+It also supports configured map-only input:
+
+```php
+DataTable::parseSort($sortColumns);
+```
+
+The map-only form reads `inertia-datatables.query_params.column`.
 
 Example sort mapping:
 
@@ -472,7 +538,7 @@ Usage:
 ```php
 [$sort, $allowedSorts] = DataTable::parseSort(
     $request->query('col'),
-    $sortColumns
+    $sortColumns,
 );
 ```
 
@@ -544,7 +610,7 @@ public function show(Request $request, Contact $contact)
 
     [$sort, $allowedSorts] = DataTable::parseSort(
         $request->query('col'),
-        $sortColumns
+        $sortColumns,
     );
 
     $tickets = DataTable::query($query)
@@ -600,7 +666,7 @@ Route::get('/users', function (Request $request) {
 
     [$sort, $allowedSorts] = DataTable::parseSort(
         $request->query('col'),
-        $sortColumns
+        $sortColumns,
     );
 
     $users = DataTable::query(User::query())
@@ -644,18 +710,36 @@ This package currently focuses on the Laravel backend query builder.
 
 Publishable Inertia React starter components are planned for a future release. Until that release, you can use this package with your own Inertia, React, Vue, Blade, or API frontend.
 
+## Testing
+
+The package uses PHPUnit through Orchestra Testbench. SQLite `:memory:` is the local default.
+
+```bash
+composer test
+vendor/bin/phpunit
+```
+
+The GitHub Actions workflow validates Composer metadata, the Laravel/PHP/Testbench matrix above, and representative MySQL 8.0 and PostgreSQL 16 jobs. Remote workflow results must be checked on GitHub; this README does not claim they have passed yet.
+
 ## Known Limitations
 
 * Beta release, API may change.
 * Inertia React components are planned but not part of the current beta release.
 * String column and relation names inside arrays may not get perfect IDE autocomplete.
-* Relation sorting does not support every relation type.
+* Relation sorting supports `BelongsTo` and `HasOne`; `HasMany` and `BelongsToMany` throw `InvalidArgumentException`.
+* Query Builder relation joins and aliases must be supplied by the caller.
 * Advanced filter operators are not implemented yet.
 
 ## Roadmap
 
-* Tests
-* Better documentation
+Completed foundation:
+
+* PHPUnit and Orchestra Testbench suite
+* Backend correctness hardening
+* Laravel/PHP and database compatibility workflow
+
+Future work:
+
 * More filter operators
 * Optional Inertia React starter components
 * Column definitions API

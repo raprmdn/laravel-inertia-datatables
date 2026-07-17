@@ -115,7 +115,7 @@ trait HasFilters
         }
     }
 
-    private function parseDateRangeValue(?string $value): ?string
+    private function parseDateRangeValue(mixed $value): ?string
     {
         if (! $this->valueIsFilled($value)) {
             return null;
@@ -123,17 +123,34 @@ trait HasFilters
 
         $format = $this->configValue('inertia-datatables.date_format', 'd-m-Y');
 
+        if (! is_string($value)) {
+            throw new InvalidArgumentException("Invalid date value. Expected format: {$format}.");
+        }
+
         try {
-            return Carbon::createFromFormat($format, $value)->format('Y-m-d');
+            $date = Carbon::createFromFormat($format, $value);
+            $errors = Carbon::getLastErrors();
         } catch (\Throwable) {
             throw new InvalidArgumentException("Invalid date format for value [{$value}]. Expected format: {$format}.");
         }
+
+        if (! $date || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            throw new InvalidArgumentException("Invalid date format for value [{$value}]. Expected format: {$format}.");
+        }
+
+        return $date->format('Y-m-d');
     }
 
     private function applyDateRangeCondition($query, string $column, ?string $from, ?string $to): void
     {
+        $toExclusive = $to
+            ? Carbon::createFromFormat('Y-m-d', $to)->addDay()->format('Y-m-d') . ' 00:00:00'
+            : null;
+
         if ($from && $to) {
-            $query->whereBetween($column, ["{$from} 00:00:00", "{$to} 23:59:59"]);
+            $query
+                ->where($column, '>=', "{$from} 00:00:00")
+                ->where($column, '<', $toExclusive);
 
             return;
         }
@@ -145,7 +162,7 @@ trait HasFilters
         }
 
         if ($to) {
-            $query->where($column, '<=', "{$to} 23:59:59");
+            $query->where($column, '<', $toExclusive);
         }
     }
 

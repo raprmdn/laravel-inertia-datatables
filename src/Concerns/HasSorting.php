@@ -56,15 +56,24 @@ trait HasSorting
             $relation = $this->resolveRelation($model, $relationName);
             $related = $relation->getRelated();
             $relatedTable = $related->getTable();
+            $relationQuery = $related->newQuery();
+            $relationTable = $relatedTable;
+            $selectColumn = $sortColumn;
+
+            if ($relatedTable === $model->getTable()) {
+                $relationTable = "{$relatedTable}_{$relationName}_relation_sort";
+                $relationQuery->from("{$relatedTable} as {$relationTable}");
+                $selectColumn = "{$relationTable}.{$sortColumn}";
+            }
 
             if ($relation instanceof BelongsTo) {
                 $ownerKey = $relation->getOwnerKeyName();
                 $foreignKey = $relation->getForeignKeyName();
 
                 return $this->query->orderBy(
-                    $related->newQuery()
-                        ->select($sortColumn)
-                        ->whereColumn("{$relatedTable}.{$ownerKey}", "{$model->getTable()}.{$foreignKey}")
+                    $relationQuery
+                        ->select($selectColumn)
+                        ->whereColumn("{$relationTable}.{$ownerKey}", "{$model->getTable()}.{$foreignKey}")
                         ->limit(1),
                     $direction
                 );
@@ -75,9 +84,9 @@ trait HasSorting
                 $foreignKey = $relation->getForeignKeyName();
 
                 return $this->query->orderBy(
-                    $related->newQuery()
-                        ->select($sortColumn)
-                        ->whereColumn("{$relatedTable}.{$foreignKey}", "{$model->getTable()}.{$localKey}")
+                    $relationQuery
+                        ->select($selectColumn)
+                        ->whereColumn("{$relationTable}.{$foreignKey}", "{$model->getTable()}.{$localKey}")
                         ->limit(1),
                     $direction
                 );

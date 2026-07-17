@@ -60,11 +60,17 @@ class DataTableManager
     /**
      * Parse requested sort column into selected sort and allowed sort columns.
      */
-    public function parseSort(?string $sort, array $sortColumns): array
+    public function parseSort(mixed $sort, array $sortColumns = []): array
     {
-        $allowedSorts = array_values($sortColumns);
+        if (is_array($sort) && $sortColumns === []) {
+            $sortColumns = $sort;
+            $sortKey = $this->configValue('inertia-datatables.query_params.column', 'col');
+            $sort = $this->requestQuery($sortKey);
+        }
 
-        if (! $sort || ! isset($sortColumns[$sort])) {
+        $allowedSorts = array_values(array_unique($sortColumns));
+
+        if (! is_string($sort) || $sort === '' || ! isset($sortColumns[$sort])) {
             return [null, $allowedSorts];
         }
 
