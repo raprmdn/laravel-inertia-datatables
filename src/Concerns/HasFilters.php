@@ -12,6 +12,8 @@ trait HasFilters
 
     protected array $allowedFilters = [];
 
+    protected array $customFilters = [];
+
     protected array $jsonColumns = [];
 
     protected array $dateRanges = [];
@@ -39,6 +41,15 @@ trait HasFilters
         }
 
         foreach ($conditions as $column => $values) {
+            if (isset($this->customFilters[$column])) {
+                ($this->customFilters[$column])(
+                    $this->query,
+                    $values,
+                );
+
+                continue;
+            }
+
             if (str_contains($column, '.') && $this->query instanceof EloquentBuilder) {
                 $parts = explode('.', $column);
                 $relationPath = implode('.', array_slice($parts, 0, -1));

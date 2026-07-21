@@ -6,6 +6,7 @@ use Countable;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use InvalidArgumentException;
 use Raprmdn\DataTables\Concerns\HasDataTable;
 use Raprmdn\DataTables\Concerns\HasFilters;
 use Raprmdn\DataTables\Concerns\HasLimitEntries;
@@ -136,6 +137,20 @@ class DataTableBuilder
     public function allowedFilters(array $allowedFilters): self
     {
         $this->allowedFilters = $allowedFilters;
+
+        return $this;
+    }
+
+    /**
+     * Register custom filtering behavior for an allowed filter key.
+     */
+    public function filterUsing(string $key, callable $callback): self
+    {
+        if (trim($key) === '') {
+            throw new InvalidArgumentException('Custom filter key must not be empty.');
+        }
+
+        $this->customFilters[$key] = $callback;
 
         return $this;
     }

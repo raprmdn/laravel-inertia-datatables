@@ -8,9 +8,9 @@
 ## Introduction
 
 `raprmdn/laravel-inertia-datatables` is a Laravel server-side datatable query
-builder. It provides searching, allowlisted filters and sorting, relation
-support, validated date ranges, pagination, and collection output without tying
-the backend to one presentation layer.
+builder. It provides searching, allowlisted exact and custom filters, sorting,
+relation support, validated date ranges, pagination, and collection output
+without tying the backend to one presentation layer.
 
 The package is backend-only and works with Inertia, API resources, Blade, or any
 other Laravel response. Optional Inertia React starter components are planned
@@ -161,6 +161,68 @@ separate AND groups. Values use query bindings.
 Parsed request filters must be paired with `allowedFilters()`. Expressions whose
 column is not in the allowlist are ignored during query application. Parsing a
 request does not make arbitrary request-provided columns safe automatically.
+
+### Custom Filters
+
+Use `filterUsing()` when a filter cannot be expressed using the built-in exact, relation, JSON, or date filters.
+
+```php
+filterUsing(string $key, callable $callback): self
+```
+
+The callback receives the original query builder and all values for the filter:
+
+```php
+function (
+    EloquentBuilder|QueryBuilder $query,
+    array $values,
+): void
+```
+
+The callback runs once per matching filter during `make()`. Registering the same key again replaces the previous callback.
+
+#### Example
+
+```text
+filters[]=category_state:categorized
+filters[]=category_state:uncategorized
+```
+
+```php
+$posts = DataTable::query(Post::query())
+    ->applyFilters($columnFilters)
+    ->allowedFilters($allowedFilters)
+    ->filterUsing(
+        'category_state',
+        function (EloquentBuilder $query, array $values): void {
+            $categorized = in_array('categorized', $values, true);
+            $uncategorized = in_array('uncategorized', $values, true);
+
+            if ($categorized === $uncategorized) {
+                return;
+            }
+
+            if ($categorized) {
+                $query->has('categories');
+
+                return;
+            }
+
+            $query->doesntHave('categories');
+        },
+    )
+    ->make();
+```
+
+#### Notes
+
+- The filter key must also be included in `allowedFilters()`.
+- The callback receives all selected values for that filter.
+- Different custom filters are combined with `AND`.
+- Multiple values for the same filter are handled by your callback.
+- Eloquent-specific methods such as `has()` and `whereHas()` require an Eloquent Builder.
+- Custom filters should only add query constraints. They should not execute the query.
+- Authorization (ownership, tenancy, visibility) should remain in the base query, not in optional filters.
 
 ### Filter Mapping
 
@@ -502,9 +564,9 @@ aliases are compared only by exact string equality.
 
 ### Supported Behavior
 
-Query Builder supports valid SQL columns for searching, allowlisted filters,
-date ranges, sorting, pagination, and collection output. Results are plain
-objects rather than Eloquent models.
+Query Builder supports valid SQL columns for searching, allowlisted exact and
+custom filters, date ranges, sorting, pagination, and collection output. Results
+are plain objects rather than Eloquent models.
 
 ### Relationship Limitations
 
@@ -777,6 +839,7 @@ methods return the same builder for fluent chaining.
 | `searchable(array $searchable): self` | Replaces searchable columns. | Both; dotted semantics differ |
 | `applyFilters(array $filters): self` | Replaces filter expressions. | Both; requires matching allowlist |
 | `allowedFilters(array $allowedFilters): self` | Replaces the trusted filter and date allowlist. | Both |
+| `filterUsing(string $key, callable $callback): self` | Accumulates custom callbacks by mapped key; replacing an existing callback for the same key. | Both; callback receives the original builder |
 | `applyDateRanges(array $dateRanges): self` | Replaces date range state and validates values during `make()`. | Both; dotted Eloquent paths use relations |
 | `applySort(?string $sort): self` | Replaces the selected backend sort; `null` uses fallback ordering. | Both |
 | `allowedSorts(array $allowedSorts): self` | Replaces the trusted sort allowlist. | Both |
@@ -920,7 +983,8 @@ vendor/bin/phpunit
 - String column and relation names may not receive perfect IDE autocomplete.
 - Relation sorting supports `BelongsTo` and `HasOne`, not `HasMany` or `BelongsToMany`.
 - Query Builder joins and aliases must be supplied by the caller.
-- Advanced filter operators are not implemented.
+- Generic frontend filter operators are not implemented; use trusted
+  `filterUsing()` callbacks for application-specific behavior.
 
 
 ## Contributing
