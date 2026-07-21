@@ -21,7 +21,10 @@ trait HasSorting
         $column = $this->sort ?: $this->orderBy;
 
         $directionKey = $this->configValue('inertia-datatables.query_params.direction', 'sort');
-        $direction = strtolower((string) $this->requestQuery($directionKey, $this->direction));
+        $requestedDirection = $this->requestQuery($directionKey, $this->direction);
+        $direction = is_string($requestedDirection)
+            ? strtolower($requestedDirection)
+            : $this->direction;
 
         if (! in_array($column, $this->allowedSorts, true)) {
             $column = $this->orderBy;
@@ -35,7 +38,29 @@ trait HasSorting
             return $this->applyRelationSort($column, $direction);
         }
 
+        if ($this->query instanceof EloquentBuilder && ! $this->isSelectedAlias($column)) {
+            $column = $this->qualifyEloquentColumn($this->query, $column);
+        }
+
         return $this->query->orderBy($column, $direction);
+    }
+
+    private function isSelectedAlias(string $column): bool
+    {
+        $query = $this->query->getQuery();
+        $grammar = $query->getGrammar();
+
+        foreach ($query->columns ?? [] as $selected) {
+            $selected = $grammar->getValue($selected);
+
+            if (is_string($selected)
+                && preg_match('/\s+as\s+[`"\[]?([^`"\]\s]+)[`"\]]?\s*$/i', $selected, $matches)
+                && $matches[1] === $column) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function applyRelationSort(string $column, string $direction)
@@ -54,92 +79,105 @@ trait HasSorting
         if (count($parts) === 1) {
             $relationName = $parts[0];
             $relation = $this->resolveRelation($model, $relationName);
-            $related = $relation->getRelated();
-            $relatedTable = $related->getTable();
-            $relationQuery = $related->newQuery();
-            $relationTable = $relatedTable;
-            $selectColumn = $sortColumn;
 
-            if ($relatedTable === $model->getTable()) {
-                $relationTable = "{$relatedTable}_{$relationName}_relation_sort";
-                $relationQuery->from("{$relatedTable} as {$relationTable}");
-                $selectColumn = "{$relationTable}.{$sortColumn}";
-            }
-
-            if ($relation instanceof BelongsTo) {
-                $ownerKey = $relation->getOwnerKeyName();
-                $foreignKey = $relation->getForeignKeyName();
-
+            if ($relation->getRelated()->getTable() === $model->getTable()) {
                 return $this->query->orderBy(
-                    $relationQuery
-                        ->select($selectColumn)
-                        ->whereColumn("{$relationTable}.{$ownerKey}", "{$model->getTable()}.{$foreignKey}")
-                        ->limit(1),
-                    $direction
+                    $this->buildSelfRelationSortQuery($relation, $relationName, $sortColumn),
+                    $direction,
                 );
             }
+        }
 
-            if ($relation instanceof HasOne) {
-                $localKey = $relation->getLocalKeyName();
-                $foreignKey = $relation->getForeignKeyName();
+        $relationQuery = $this->buildRelationSortQuery(
+            $this->query,
+            $model,
+            $parts,
+            $sortColumn,
+            count($parts) > 1,
+        );
 
-                return $this->query->orderBy(
-                    $relationQuery
-                        ->select($selectColumn)
-                        ->whereColumn("{$relationTable}.{$foreignKey}", "{$model->getTable()}.{$localKey}")
-                        ->limit(1),
-                    $direction
-                );
-            }
+        return $this->query->orderBy($relationQuery, $direction);
+    }
 
+    private function buildSelfRelationSortQuery(
+        Relation $relation,
+        string $relationName,
+        string $sortColumn,
+    ): EloquentBuilder {
+        if (! $relation instanceof BelongsTo && ! $relation instanceof HasOne) {
             throw new InvalidArgumentException("Unsupported relation type for sorting: {$relationName}.");
         }
 
-        if (empty($this->query->getQuery()->columns)) {
-            $this->query->select($model->getTable() . '.*');
+        $table = $relation->getRelated()->getTable();
+        $alias = "{$table}_{$relationName}_relation_sort";
+        $query = $relation->getRelated()->newQuery()->from("{$table} as {$alias}");
+        $query->getModel()->setTable($alias);
+        $query->mergeConstraintsFrom($relation->getQuery());
+        $query->select("{$alias}.{$sortColumn}");
+
+        if ($relation instanceof BelongsTo) {
+            $query->whereColumn(
+                "{$alias}.{$relation->getOwnerKeyName()}",
+                $this->qualifyEloquentColumn($this->query, $relation->getForeignKeyName()),
+            );
+        } else {
+            $query->whereColumn(
+                "{$alias}.{$relation->getForeignKeyName()}",
+                $this->qualifyEloquentColumn($this->query, $relation->getLocalKeyName()),
+            );
         }
 
-        $parentModel = $model;
-        $parentTable = $model->getTable();
+        return $query->limit(1);
+    }
 
-        foreach ($parts as $index => $relationName) {
-            $relation = $this->resolveRelation($parentModel, $relationName);
-            $relatedModel = $relation->getRelated();
-            $relatedTable = $relatedModel->getTable();
-            $relationAlias = "{$relatedTable}_{$relationName}_{$index}";
+    private function buildRelationSortQuery(
+        EloquentBuilder $parentQuery,
+        $parentModel,
+        array $parts,
+        string $sortColumn,
+        bool $nested,
+    ): EloquentBuilder {
+        $parentModel = clone $parentModel;
+        $parentTable = $this->eloquentTableReference($parentQuery);
 
-            $joins = $this->query->getQuery()->joins ?? [];
-            $alreadyJoined = collect($joins)->contains(
-                fn ($join) => $join->table === "{$relatedTable} as {$relationAlias}"
-            );
+        if ($parentTable !== null) {
+            $parentModel->setTable($parentTable);
+        }
 
-            if (! $alreadyJoined) {
-                if ($relation instanceof BelongsTo) {
-                    $this->query->leftJoin(
-                        "{$relatedTable} as {$relationAlias}",
-                        "{$relationAlias}." . $relation->getOwnerKeyName(),
-                        '=',
-                        "{$parentTable}." . $relation->getForeignKeyName()
-                    );
-                } elseif ($relation instanceof HasOne) {
-                    $this->query->leftJoin(
-                        "{$relatedTable} as {$relationAlias}",
-                        "{$relationAlias}." . $relation->getForeignKeyName(),
-                        '=',
-                        "{$parentTable}." . $relation->getLocalKeyName()
-                    );
-                } else {
-                    throw new InvalidArgumentException(
-                        'Unsupported relation type [' . get_class($relation) . "] for multi-level sort on [{$relationName}]."
-                    );
-                }
+        $relationName = array_shift($parts);
+        $relation = $this->resolveRelation($parentModel, $relationName);
+
+        if (! $relation instanceof BelongsTo && ! $relation instanceof HasOne) {
+            if (! $nested) {
+                throw new InvalidArgumentException("Unsupported relation type for sorting: {$relationName}.");
             }
 
-            $parentModel = $relatedModel;
-            $parentTable = $relationAlias;
+            throw new InvalidArgumentException(
+                'Unsupported relation type [' . get_class($relation) . "] for multi-level sort on [{$relationName}]."
+            );
         }
 
-        return $this->query->orderBy("{$parentTable}.{$sortColumn}", $direction);
+        $query = $relation->getRelationExistenceQuery(
+            $relation->getRelated()->newQuery(),
+            $parentQuery,
+        );
+        $query->mergeConstraintsFrom($relation->getQuery());
+
+        if ($parts === []) {
+            $query->select($this->qualifyEloquentColumn($query, $sortColumn));
+        } else {
+            $nestedQuery = $this->buildRelationSortQuery(
+                $query,
+                $query->getModel(),
+                $parts,
+                $sortColumn,
+                true,
+            );
+
+            $query->select([])->selectSub($nestedQuery, 'relation_sort_value');
+        }
+
+        return $query->limit(1);
     }
 
     private function resolveRelation($model, string $relationName): Relation
@@ -148,7 +186,7 @@ trait HasSorting
             throw new InvalidArgumentException('Relation [' . $relationName . '] does not exist on ' . get_class($model) . '.');
         }
 
-        $relation = $model->{$relationName}();
+        $relation = Relation::noConstraints(fn () => $model->{$relationName}());
 
         if (! $relation instanceof Relation) {
             throw new InvalidArgumentException('Method [' . $relationName . '] on ' . get_class($model) . ' is not an Eloquent relation.');

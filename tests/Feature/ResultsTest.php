@@ -91,6 +91,27 @@ class ResultsTest extends TestCase
         $this->assertCount(15, $result);
     }
 
+    public function test_collection_output_preserves_an_existing_query_limit(): void
+    {
+        $result = DataTable::query(Record::query()->limit(3))
+            ->orderBy('id', 'asc')
+            ->type('collection')
+            ->make();
+
+        $this->assertCount(3, $result);
+    }
+
+    public function test_query_builder_supports_length_aware_pagination(): void
+    {
+        $result = DataTable::query(DB::table('records')->select(['records.id', 'records.name']))
+            ->orderBy('records.id', 'asc')
+            ->make();
+
+        $this->assertInstanceOf(LengthAwarePaginator::class, $result);
+        $this->assertSame(15, $result->total());
+        $this->assertSame(['id', 'name'], array_keys((array) $result->items()[0]));
+    }
+
     public function test_eloquent_builder_returns_models(): void
     {
         $result = DataTable::query(Record::query())

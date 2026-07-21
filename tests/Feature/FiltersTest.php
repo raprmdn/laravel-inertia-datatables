@@ -137,6 +137,39 @@ class FiltersTest extends TestCase
         $this->assertSame(['Beta'], $result->pluck('name')->all());
     }
 
+    public function test_filter_columns_are_qualified_when_the_query_has_joins(): void
+    {
+        $query = Record::query()
+            ->select(['records.id', 'records.name'])
+            ->leftJoin('organizations', 'organizations.id', '=', 'records.organization_id');
+
+        $result = DataTable::query($query)
+            ->applyFilters(['name:Alpha'])
+            ->allowedFilters(['name'])
+            ->orderBy('id', 'asc')
+            ->type('collection')
+            ->make();
+
+        $this->assertSame(['Alpha'], $result->pluck('name')->all());
+        $this->assertSame(['records.id', 'records.name'], $query->getQuery()->columns);
+    }
+
+    public function test_relation_filter_columns_are_qualified(): void
+    {
+        $query = Record::query();
+
+        DataTable::query($query)
+            ->applyFilters(['organization.name:Acme'])
+            ->allowedFilters(['organization.name'])
+            ->orderBy('id', 'asc')
+            ->type('collection')
+            ->make();
+
+        $column = $query->getQuery()->getGrammar()->wrap('organizations.name');
+
+        $this->assertStringContainsString($column, $query->toSql());
+    }
+
     private function filter(array $filters, array $allowed): Collection
     {
         return DataTable::query(Record::query())

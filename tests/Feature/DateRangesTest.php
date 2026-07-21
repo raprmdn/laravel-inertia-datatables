@@ -119,6 +119,43 @@ class DateRangesTest extends TestCase
         $this->assertStringNotContainsString('2026-01-15 00:00:00', $query->toSql());
     }
 
+    public function test_date_range_sql_is_qualified_and_index_friendly(): void
+    {
+        $query = Record::query();
+
+        DataTable::query($query)
+            ->applyDateRanges([
+                'created_at' => ['from' => '01-01-2026', 'to' => '31-01-2026'],
+            ])
+            ->allowedFilters(['created_at'])
+            ->orderBy('id', 'asc')
+            ->type('collection')
+            ->make();
+
+        $sql = strtolower($query->toSql());
+        $column = strtolower($query->getQuery()->getGrammar()->wrap('records.created_at'));
+
+        $this->assertStringContainsString("{$column} >= ?", $sql);
+        $this->assertStringContainsString("{$column} < ?", $sql);
+        $this->assertStringNotContainsString('date(', $sql);
+        $this->assertStringNotContainsString('cast(', $sql);
+    }
+
+    public function test_query_builder_date_ranges_preserve_caller_columns(): void
+    {
+        $query = DB::table('records')->select(['records.id', 'records.name']);
+
+        $result = DataTable::query($query)
+            ->applyDateRanges(['records.created_at' => ['from' => '15-01-2026']])
+            ->allowedFilters(['records.created_at'])
+            ->orderBy('records.id', 'asc')
+            ->type('collection')
+            ->make();
+
+        $this->assertSame(['Middle', 'Late'], $result->pluck('name')->all());
+        $this->assertSame(['records.id', 'records.name'], $query->columns);
+    }
+
     public function test_valid_leap_date_is_accepted(): void
     {
         Record::query()->create([

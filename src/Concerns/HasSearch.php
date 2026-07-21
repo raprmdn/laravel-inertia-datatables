@@ -17,11 +17,11 @@ trait HasSearch
         $searchKey = $this->configValue('inertia-datatables.query_params.search', 'search');
         $search = $this->requestQuery($searchKey);
 
-        if (! $this->valueIsFilled($search)) {
+        if (! is_string($search) || ! $this->valueIsFilled($search)) {
             return;
         }
 
-        $searchTerm = '%' . strtolower((string) $search) . '%';
+        $searchTerm = '%' . strtolower($search) . '%';
 
         $this->query->where(function ($query) use ($searchTerm) {
             foreach ($this->searchable as $column) {
@@ -31,13 +31,23 @@ trait HasSearch
                     $columnName = end($parts);
 
                     $query->orWhereHas($relationPath, function ($nestedQuery) use ($searchTerm, $columnName) {
-                        $nestedQuery->whereRaw("LOWER({$columnName}) LIKE ?", [$searchTerm]);
+                        $column = $this->qualifyEloquentColumn($nestedQuery, $columnName);
+                        $column = $nestedQuery->getQuery()->getGrammar()->wrap($column);
+
+                        $nestedQuery->whereRaw("LOWER({$column}) LIKE ?", [$searchTerm]);
                     });
 
                     continue;
                 }
 
-                $query->orWhereRaw("LOWER({$column}) LIKE ?", [$searchTerm]);
+                $column = $this->query instanceof EloquentBuilder
+                    ? $this->qualifyEloquentColumn($this->query, $column)
+                    : $column;
+                $grammar = $this->query instanceof EloquentBuilder
+                    ? $this->query->getQuery()->getGrammar()
+                    : $query->getGrammar();
+
+                $query->orWhereRaw('LOWER(' . $grammar->wrap($column) . ') LIKE ?', [$searchTerm]);
             }
         });
     }

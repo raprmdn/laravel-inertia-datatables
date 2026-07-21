@@ -15,6 +15,11 @@ class Organization extends Model
         return $this->belongsTo(Country::class);
     }
 
+    public function scopedCountry(): BelongsTo
+    {
+        return $this->belongsTo(ScopedCountry::class, 'country_id');
+    }
+
     public function records(): HasMany
     {
         return $this->hasMany(Record::class);

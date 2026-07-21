@@ -21,6 +21,12 @@ class Record extends Model
         return $this->belongsTo(Organization::class);
     }
 
+    public function visibleOrganization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class, 'organization_id')
+            ->where('organizations.name', '!=', 'Hidden Org');
+    }
+
     public function profile(): HasOne
     {
         return $this->hasOne(Profile::class);

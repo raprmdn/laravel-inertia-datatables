@@ -71,6 +71,16 @@ class SearchTest extends TestCase
         );
     }
 
+    public function test_malformed_search_value_leaves_query_unfiltered(): void
+    {
+        $this->setRequestQuery(['search' => ['alpha']]);
+
+        $this->assertSame(
+            ['Alpha', 'Beta', 'Open Beta'],
+            $this->search(['name'])->pluck('name')->all()
+        );
+    }
+
     public function test_search_predicates_remain_grouped_with_existing_constraints(): void
     {
         $this->setRequestQuery(['search' => 'beta']);
@@ -114,6 +124,82 @@ class SearchTest extends TestCase
         $binding = '%' . strtolower($value) . '%';
         $this->assertContains($binding, $query->getBindings());
         $this->assertStringNotContainsString($value, $query->toSql());
+    }
+
+    public function test_search_columns_are_qualified_and_wrapped(): void
+    {
+        $this->setRequestQuery(['search' => 'alpha']);
+        $query = Record::query();
+
+        $this->search(['name'], $query);
+
+        $column = $query->getQuery()->getGrammar()->wrap('records.name');
+
+        $this->assertStringContainsString("LOWER({$column}) LIKE ?", $query->toSql());
+    }
+
+    public function test_relation_search_columns_are_qualified_and_wrapped(): void
+    {
+        $this->setRequestQuery(['search' => 'acme']);
+        $query = Record::query();
+
+        $this->search(['organization.name'], $query);
+
+        $column = $query->getQuery()->getGrammar()->wrap('organizations.name');
+
+        $this->assertStringContainsString("LOWER({$column}) LIKE ?", $query->toSql());
+    }
+
+    public function test_search_remains_unambiguous_with_relation_sort_joins(): void
+    {
+        $this->setRequestQuery(['search' => 'alpha', 'sort' => 'asc']);
+        $query = Record::query()
+            ->select(['records.id', 'records.name'])
+            ->whereNotNull('organization_id');
+
+        $result = DataTable::query($query)
+            ->searchable(['name'])
+            ->applySort('organization.country.name')
+            ->allowedSorts(['organization.country.name'])
+            ->type('collection')
+            ->make();
+
+        $this->assertSame(['Alpha'], $result->pluck('name')->all());
+        $this->assertSame(['records.id', 'records.name'], $query->getQuery()->columns);
+    }
+
+    public function test_eloquent_from_alias_is_used_when_qualifying_search_columns(): void
+    {
+        $this->setRequestQuery(['search' => 'alpha']);
+        $query = Record::query()
+            ->from('records as base_records')
+            ->select(['base_records.id', 'base_records.name']);
+
+        $result = DataTable::query($query)
+            ->searchable(['name'])
+            ->orderBy('id', 'asc')
+            ->type('collection')
+            ->make();
+
+        $this->assertSame(['Alpha'], $result->pluck('name')->all());
+        $this->assertSame(['base_records.id', 'base_records.name'], $query->getQuery()->columns);
+    }
+
+    public function test_eloquent_subquery_alias_is_used_when_qualifying_search_columns(): void
+    {
+        $this->setRequestQuery(['search' => 'alpha']);
+        $query = Record::query()
+            ->fromSub(Record::query(), 'base_records')
+            ->select(['base_records.id', 'base_records.name']);
+
+        $result = DataTable::query($query)
+            ->searchable(['name'])
+            ->orderBy('id', 'asc')
+            ->type('collection')
+            ->make();
+
+        $this->assertSame(['Alpha'], $result->pluck('name')->all());
+        $this->assertSame(['base_records.id', 'base_records.name'], $query->getQuery()->columns);
     }
 
     private function search(array $columns, ?Builder $query = null): Collection

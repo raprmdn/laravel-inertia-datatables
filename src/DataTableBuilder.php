@@ -281,4 +281,40 @@ class DataTableBuilder
 
         return true;
     }
+
+    protected function qualifyEloquentColumn(EloquentBuilder $query, string $column): string
+    {
+        if (str_contains($column, '.')) {
+            return $column;
+        }
+
+        $table = $this->eloquentTableReference($query);
+
+        return $table === null ? $column : "{$table}.{$column}";
+    }
+
+    protected function eloquentTableReference(EloquentBuilder $query): ?string
+    {
+        $from = $query->getQuery()->from;
+        $fromExpression = ! is_string($from);
+
+        if ($fromExpression) {
+            $from = $query->getQuery()->getGrammar()->getValue($from);
+        }
+
+        if (! is_string($from)) {
+            return null;
+        }
+
+        if (preg_match('/\s+as\s+[`"\[]?([^`"\]\s]+)[`"\]]?\s*$/i', $from, $matches)) {
+            $alias = $matches[1];
+            $prefix = $query->getQuery()->getConnection()->getTablePrefix();
+
+            return $fromExpression && $prefix !== '' && str_starts_with($alias, $prefix)
+                ? substr($alias, strlen($prefix))
+                : $alias;
+        }
+
+        return str_contains(trim($from), ' ') ? null : trim($from);
+    }
 }

@@ -56,13 +56,19 @@ trait HasFilters
                 $columnName = end($parts);
 
                 $this->query->whereHas($relationPath, function ($query) use ($column, $columnName, $values) {
+                    $columnName = $this->qualifyEloquentColumn($query, $columnName);
+
                     $this->applyConditions($query, $columnName, $values, $column);
                 });
 
                 continue;
             }
 
-            $this->applyConditions($this->query, $column, $values);
+            $queryColumn = $this->query instanceof EloquentBuilder
+                ? $this->qualifyEloquentColumn($this->query, $column)
+                : $column;
+
+            $this->applyConditions($this->query, $queryColumn, $values, $column);
         }
 
         return $this->query;
@@ -116,13 +122,19 @@ trait HasFilters
                 $columnName = end($parts);
 
                 $this->query->whereHas($relationPath, function ($query) use ($columnName, $from, $to) {
+                    $columnName = $this->qualifyEloquentColumn($query, $columnName);
+
                     $this->applyDateRangeCondition($query, $columnName, $from, $to);
                 });
 
                 continue;
             }
 
-            $this->applyDateRangeCondition($this->query, $column, $from, $to);
+            $queryColumn = $this->query instanceof EloquentBuilder
+                ? $this->qualifyEloquentColumn($this->query, $column)
+                : $column;
+
+            $this->applyDateRangeCondition($this->query, $queryColumn, $from, $to);
         }
     }
 

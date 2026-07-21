@@ -112,7 +112,8 @@ Searchable columns are trusted developer-defined identifiers. The request value
 is lowercased, wrapped in `%`, and passed through query bindings. Searchable
 columns are OR-grouped inside one parenthesized condition, preserving existing
 query constraints. An empty column list or search value leaves the query
-unchanged.
+unchanged. Eloquent columns are qualified against their query table, and all
+search identifiers are wrapped by the active database grammar.
 
 ### Relation Columns
 
@@ -354,13 +355,14 @@ $result = DataTable::query($query)
     ->make();
 ```
 
-Only allowlisted date-range columns are parsed. Non-empty values use the
+Only allowlisted date-range columns are applied. Non-empty values use the
 configured Carbon format; parser errors, warnings, invalid calendar dates,
 non-string values, and overflow dates throw `InvalidArgumentException`. Carbon
 does not enforce exact field width. Unapproved date columns are ignored. Either
 boundary may be omitted. `from` is inclusive from midnight. `to` includes the
 entire selected calendar day through an exclusive next-midnight boundary,
-including fractional-second timestamps.
+including fractional-second timestamps. The generated comparisons do not wrap
+the database column in `DATE()`, `CAST()`, or another date function.
 
 ## Sorting
 
@@ -456,6 +458,11 @@ $result = DataTable::query($query)
 Collection output is unpaginated and ignores request or configured page-size
 behavior. Eloquent returns models; Query Builder returns plain objects.
 
+### Select Preservation
+
+Search, filters, date ranges, and sorting preserve an existing `select()`.
+Relation sorting does not add helper columns or replace the selected columns.
+
 ## Relations
 
 ### Dot Notation
@@ -501,7 +508,9 @@ on the related model, and `name` is the final column.
 ### Supported Sort Relations
 
 Eloquent sorting supports `BelongsTo` and `HasOne`, including nested paths,
-self-referencing `BelongsTo`, and self-referencing `HasOne` relations.
+self-referencing `BelongsTo`, and self-referencing `HasOne` relations. Relation
+sorts use correlated scalar subqueries, preserve relation constraints and
+related-model global scopes, and do not add joins to the base query.
 
 ### Unsupported Sort Relations
 
@@ -532,6 +541,8 @@ Pass one Laravel relationship string or an array:
 ```
 
 Laravel count aliases remain supported as exact relationship strings.
+Selected count aliases may also be mapped in `allowedSorts()`; they are ordered
+as select aliases rather than qualified as physical model columns.
 
 ### Repeated `with()` Calls
 
@@ -598,7 +609,8 @@ The alias in a dotted column must match the alias in the query. For example,
 
 Qualify columns whenever joined tables can contain the same names. Selecting
 `records.*` prevents same-named joined columns such as `id`, `name`, or
-`created_at` from replacing base result properties.
+`created_at` from replacing base result properties. Query Builder identifiers
+remain caller-defined; the package does not infer their tables or aliases.
 
 ### Nested Sort Aliases
 
