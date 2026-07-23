@@ -6,11 +6,11 @@ use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 
 trait HasSearch
 {
-    protected array $searchable = [];
-
     protected function search(): void
     {
-        if (empty($this->searchable)) {
+        $searchable = $this->columnRegistry->searchableSources();
+
+        if ($searchable === []) {
             return;
         }
 
@@ -23,8 +23,8 @@ trait HasSearch
 
         $searchTerm = '%' . strtolower($search) . '%';
 
-        $this->query->where(function ($query) use ($searchTerm) {
-            foreach ($this->searchable as $column) {
+        $this->query->where(function ($query) use ($searchTerm, $searchable) {
+            foreach ($searchable as $column) {
                 if (str_contains($column, '.') && $this->query instanceof EloquentBuilder) {
                     $parts = explode('.', $column);
                     $relationPath = implode('.', array_slice($parts, 0, -1));

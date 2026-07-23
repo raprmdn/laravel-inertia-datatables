@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use InvalidArgumentException;
+use Raprmdn\DataTables\ColumnDefinition;
 
 trait HasSorting
 {
@@ -14,11 +15,11 @@ trait HasSorting
     protected string $direction = 'desc';
     protected ?string $sort = null;
 
-    protected array $allowedSorts = [];
+    protected ?ColumnDefinition $resolvedSort = null;
 
     protected function sort()
     {
-        $column = $this->sort ?: $this->orderBy;
+        $column = $this->resolvedSort?->sortSource() ?? $this->orderBy;
 
         $directionKey = $this->configValue('inertia-datatables.query_params.direction', 'sort');
         $requestedDirection = $this->requestQuery($directionKey, $this->direction);
@@ -26,12 +27,14 @@ trait HasSorting
             ? strtolower($requestedDirection)
             : $this->direction;
 
-        if (! in_array($column, $this->allowedSorts, true)) {
-            $column = $this->orderBy;
-        }
-
         if (! in_array($direction, ['asc', 'desc'], true)) {
             $direction = $this->direction;
+        }
+
+        if ($this->resolvedSort?->sortCallback() !== null) {
+            ($this->resolvedSort->sortCallback())($this->query, $direction);
+
+            return $this->query;
         }
 
         if (str_contains($column, '.')) {

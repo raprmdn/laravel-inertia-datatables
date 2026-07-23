@@ -41,12 +41,12 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | JSON Columns
+    | Legacy JSON Columns
     |--------------------------------------------------------------------------
     |
-    | Columns or JSON paths listed here use whereJsonContains when filtered.
-    | Use this for JSON arrays or JSON columns where the selected value should
-    | be checked inside the JSON value.
+    | Legacy allowedFilters() columns or JSON paths listed here use
+    | whereJsonContains when filtered. Column definitions should use
+    | Column::make(...)->filterable()->jsonContains() instead.
     |
     | Examples:
     | - 'channels'

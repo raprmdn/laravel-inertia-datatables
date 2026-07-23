@@ -5,44 +5,30 @@ namespace Raprmdn\DataTables\Concerns;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use InvalidArgumentException;
+use Raprmdn\DataTables\Support\FilterStrategy;
 
 trait HasFilters
 {
     protected array $filters = [];
 
-    protected array $allowedFilters = [];
-
-    protected array $customFilters = [];
-
-    protected array $jsonColumns = [];
-
     protected array $dateRanges = [];
+
+    protected array $resolvedFilters = [];
+
+    protected array $resolvedDateRanges = [];
 
     protected function filter()
     {
-        if (empty($this->filters) || empty($this->allowedFilters)) {
+        if ($this->resolvedFilters === []) {
             return $this->query;
         }
 
-        $conditions = [];
+        foreach ($this->resolvedFilters as $condition) {
+            $column = $condition['source'];
+            $values = $condition['values'];
 
-        foreach ($this->filters as $filter) {
-            if (! is_string($filter) || ! str_contains($filter, ':')) {
-                continue;
-            }
-
-            [$column, $value] = explode(':', $filter, 2);
-
-            if (! in_array($column, $this->allowedFilters, true)) {
-                continue;
-            }
-
-            $conditions[$column][] = $value;
-        }
-
-        foreach ($conditions as $column => $values) {
-            if (isset($this->customFilters[$column])) {
-                ($this->customFilters[$column])(
+            if ($condition['strategy'] === FilterStrategy::Custom) {
+                ($condition['callback'])(
                     $this->query,
                     $values,
                 );
@@ -55,10 +41,10 @@ trait HasFilters
                 $relationPath = implode('.', array_slice($parts, 0, -1));
                 $columnName = end($parts);
 
-                $this->query->whereHas($relationPath, function ($query) use ($column, $columnName, $values) {
+                $this->query->whereHas($relationPath, function ($query) use ($columnName, $values, $condition) {
                     $columnName = $this->qualifyEloquentColumn($query, $columnName);
 
-                    $this->applyConditions($query, $columnName, $values, $column);
+                    $this->applyConditions($query, $columnName, $values, $condition['strategy']);
                 });
 
                 continue;
@@ -68,15 +54,15 @@ trait HasFilters
                 ? $this->qualifyEloquentColumn($this->query, $column)
                 : $column;
 
-            $this->applyConditions($this->query, $queryColumn, $values, $column);
+            $this->applyConditions($this->query, $queryColumn, $values, $condition['strategy']);
         }
 
         return $this->query;
     }
 
-    private function applyConditions($query, string $column, array $values, ?string $configuredColumn = null): void
+    private function applyConditions($query, string $column, array $values, FilterStrategy $strategy): void
     {
-        $query->where(function ($query) use ($column, $values, $configuredColumn) {
+        $query->where(function ($query) use ($column, $values, $strategy) {
             foreach ($values as $value) {
                 if ($value === 'NULL') {
                     $query->orWhereNull($column);
@@ -88,9 +74,27 @@ trait HasFilters
                     continue;
                 }
 
-                if ($this->isJsonColumn($column, $configuredColumn)) {
+                if ($strategy === FilterStrategy::JsonContains) {
+                    if (is_array($value)) {
+                        if ($query->getConnection()->getDriverName() === 'sqlite') {
+                            $query->orWhere(function ($query) use ($column, $value): void {
+                                $this->applySqliteJsonArrayCondition($query, $column, $value);
+                            });
+                        } else {
+                            $query->orWhereJsonContains($column, $value);
+                        }
+
+                        continue;
+                    }
+
                     $query->orWhereJsonContains($column, $value);
                     continue;
+                }
+
+                if (is_array($value)) {
+                    throw new InvalidArgumentException(
+                        'Array filter values require jsonContains() or filterUsing().'
+                    );
                 }
 
                 $query->orWhere($column, $value);
@@ -98,16 +102,58 @@ trait HasFilters
         });
     }
 
-    protected function filterDateRanges(): void
+    private function applySqliteJsonArrayCondition($query, string $column, array $value): void
     {
-        if (empty($this->dateRanges) || empty($this->allowedFilters)) {
+        if (array_is_list($value)) {
+            if ($value === []) {
+                $grammar = $query instanceof EloquentBuilder
+                    ? $query->getQuery()->getGrammar()
+                    : $query->getGrammar();
+                $query->whereRaw('json_type(' . $grammar->wrap($column) . ") = 'array'");
+
+                return;
+            }
+
+            foreach ($value as $item) {
+                if (is_array($item)) {
+                    throw new InvalidArgumentException(
+                        'SQLite JSON containment does not support nested array alias values.'
+                    );
+                }
+
+                $query->whereJsonContains($column, $item);
+            }
+
             return;
         }
 
-        foreach ($this->dateRanges as $column => $range) {
-            if (! in_array($column, $this->allowedFilters, true)) {
+        foreach ($value as $key => $item) {
+            $path = "{$column}->{$key}";
+
+            if (is_array($item)) {
+                $this->applySqliteJsonArrayCondition($query, $path, $item);
+
                 continue;
             }
+
+            if ($item === null) {
+                $query->whereJsonContainsKey($path)->whereNull($path);
+
+                continue;
+            }
+
+            $query->where($path, $item);
+        }
+    }
+
+    protected function filterDateRanges(): void
+    {
+        if ($this->resolvedDateRanges === []) {
+            return;
+        }
+
+        foreach ($this->resolvedDateRanges as $range) {
+            $column = $range['source'];
 
             $from = $this->parseDateRangeValue($range['from'] ?? null);
             $to = $this->parseDateRangeValue($range['to'] ?? null);
@@ -189,9 +235,4 @@ trait HasFilters
         }
     }
 
-    private function isJsonColumn(string $column, ?string $configuredColumn = null): bool
-    {
-        return in_array($column, $this->jsonColumns, true)
-            || ($configuredColumn !== null && in_array($configuredColumn, $this->jsonColumns, true));
-    }
 }

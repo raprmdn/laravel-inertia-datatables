@@ -13,6 +13,7 @@ use Raprmdn\DataTables\Concerns\HasLimitEntries;
 use Raprmdn\DataTables\Concerns\HasRelations;
 use Raprmdn\DataTables\Concerns\HasSearch;
 use Raprmdn\DataTables\Concerns\HasSorting;
+use Raprmdn\DataTables\Support\ColumnRegistry;
 
 class DataTableBuilder
 {
@@ -23,10 +24,14 @@ class DataTableBuilder
     use HasSorting;
     use HasLimitEntries;
 
+    protected ColumnRegistry $columnRegistry;
+
     public function __construct()
     {
         $this->limit = (int) $this->configValue('inertia-datatables.pagination.default_per_page', 10);
-        $this->jsonColumns = $this->configValue('inertia-datatables.json_columns', []);
+        $this->columnRegistry = new ColumnRegistry(
+            $this->configValue('inertia-datatables.json_columns', []),
+        );
     }
 
     /**
@@ -84,7 +89,7 @@ class DataTableBuilder
      */
     public function searchable(array $searchable): self
     {
-        $this->searchable = $searchable;
+        $this->columnRegistry->replaceLegacySearchable($searchable);
 
         return $this;
     }
@@ -92,8 +97,8 @@ class DataTableBuilder
     /**
      * Set filters that should be applied.
      *
-     * Filters should be parsed before being passed to this method.
-     * Use DataTable::parseFilters() to map public filter keys to trusted database columns.
+     * Legacy filters may be parsed with DataTable::parseFilters(). Raw public
+     * keys are resolved when column definitions are registered.
      *
      * Format: `column:value`.
      * Relationship columns may use dot notation.
@@ -136,7 +141,7 @@ class DataTableBuilder
      */
     public function allowedFilters(array $allowedFilters): self
     {
-        $this->allowedFilters = $allowedFilters;
+        $this->columnRegistry->replaceLegacyFilters($allowedFilters);
 
         return $this;
     }
@@ -150,7 +155,7 @@ class DataTableBuilder
             throw new InvalidArgumentException('Custom filter key must not be empty.');
         }
 
-        $this->customFilters[$key] = $callback;
+        $this->columnRegistry->registerLegacyFilterCallback($key, $callback);
 
         return $this;
     }
@@ -159,7 +164,8 @@ class DataTableBuilder
      * Set the requested sort column.
      *
      * This value is usually taken from the configured sort column query parameter.
-     * The column should also be whitelisted using allowedSorts().
+     * Legacy backend columns should be whitelisted using allowedSorts(). Public
+     * keys are resolved when column definitions are registered.
      *
      * Examples: `name`, `created_at`, `contact.name`.
      */
@@ -180,7 +186,17 @@ class DataTableBuilder
      */
     public function allowedSorts(array $allowedSorts): self
     {
-        $this->allowedSorts = $allowedSorts;
+        $this->columnRegistry->replaceLegacySorts($allowedSorts);
+
+        return $this;
+    }
+
+    /**
+     * Register declarative column definitions.
+     */
+    public function columnDefinitions(array $definitions): self
+    {
+        $this->columnRegistry->register($definitions);
 
         return $this;
     }

@@ -5,6 +5,7 @@ namespace Raprmdn\DataTables\Concerns;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use InvalidArgumentException;
+use Raprmdn\DataTables\Support\ColumnRequestResolver;
 
 trait HasDataTable
 {
@@ -22,6 +23,15 @@ trait HasDataTable
         if (! in_array($this->type, ['pagination', 'collection'], true)) {
             throw new InvalidArgumentException('DataTable type must be pagination or collection.');
         }
+
+        $resolved = (new ColumnRequestResolver($this->columnRegistry))->resolve(
+            $this->filters,
+            $this->dateRanges,
+            $this->sort,
+        );
+        $this->resolvedFilters = $resolved['filters'];
+        $this->resolvedDateRanges = $resolved['dateRanges'];
+        $this->resolvedSort = $resolved['sort'];
 
         $this->relations();
         $this->search();
