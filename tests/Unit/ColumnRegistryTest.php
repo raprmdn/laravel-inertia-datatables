@@ -16,6 +16,8 @@ class ColumnRegistryTest extends TestCase
         $secondFilter = fn () => null;
         $firstSort = fn () => null;
         $secondSort = fn () => null;
+        $firstSearch = fn () => null;
+        $secondSearch = fn () => null;
         $registry = new ColumnRegistry();
 
         $registry->register([
@@ -24,13 +26,15 @@ class ColumnRegistryTest extends TestCase
                 ->filterable()
                 ->filterAliases(['active' => 1, 'replaced' => 'first'])
                 ->filterUsing($firstFilter)
-                ->sortUsing($firstSort),
+                ->sortUsing($firstSort)
+                ->searchUsing($firstSearch),
             Column::make('author', 'writer.name')
                 ->searchable()
                 ->sortable('writer.rank')
                 ->filterAliases(['replaced' => 'second'])
                 ->filterUsing($secondFilter)
-                ->sortUsing($secondSort),
+                ->sortUsing($secondSort)
+                ->searchUsing($secondSearch),
         ]);
 
         $definition = $registry->find('author');
@@ -44,6 +48,8 @@ class ColumnRegistryTest extends TestCase
         $this->assertSame(['active' => 1, 'replaced' => 'second'], $definition->aliases());
         $this->assertSame($secondFilter, $definition->filterCallback());
         $this->assertSame($secondSort, $definition->sortCallback());
+        $this->assertSame([$secondSearch], $registry->searchCallbacks());
+        $this->assertSame([], $registry->searchableSources());
     }
 
     public function test_null_sources_do_not_erase_previous_explicit_sources(): void

@@ -121,7 +121,7 @@ class SearchTest extends TestCase
 
         $this->search(['name'], $query);
 
-        $binding = '%' . strtolower($value) . '%';
+        $binding = '%' . $value . '%';
         $this->assertContains($binding, $query->getBindings());
         $this->assertStringNotContainsString($value, $query->toSql());
     }
@@ -135,7 +135,8 @@ class SearchTest extends TestCase
 
         $column = $query->getQuery()->getGrammar()->wrap('records.name');
 
-        $this->assertStringContainsString("LOWER({$column}) LIKE ?", $query->toSql());
+        $this->assertStringContainsString($column, $query->toSql());
+        $this->assertStringNotContainsString('LOWER(', $query->toSql());
     }
 
     public function test_relation_search_columns_are_qualified_and_wrapped(): void
@@ -147,7 +148,77 @@ class SearchTest extends TestCase
 
         $column = $query->getQuery()->getGrammar()->wrap('organizations.name');
 
-        $this->assertStringContainsString("LOWER({$column}) LIKE ?", $query->toSql());
+        $this->assertStringContainsString($column, $query->toSql());
+        $this->assertStringNotContainsString('LOWER(', $query->toSql());
+    }
+
+    public function test_search_matches_like_wildcards_literally(): void
+    {
+        Record::query()->create(['name' => 'Rate 50%', 'status' => 'open']);
+
+        foreach (['%' => ['Rate 50%'], 'a_p' => [], '!' => []] as $value => $expected) {
+            $this->setRequestQuery(['search' => $value]);
+
+            $this->assertSame($expected, $this->search(['name'])->pluck('name')->all(), "Search [{$value}]");
+        }
+    }
+
+    public function test_columns_on_one_relation_path_share_one_subquery(): void
+    {
+        $alpha = Record::query()->where('name', 'Alpha')->first();
+        Record::query()->where('name', 'Beta')->update(['manager_id' => $alpha->id]);
+        $this->setRequestQuery(['search' => 'closed']);
+        $query = Record::query();
+
+        $result = $this->search(['directReports.name', 'directReports.status'], $query);
+
+        $this->assertSame(['Alpha'], $result->pluck('name')->all());
+        $this->assertSame(1, substr_count(strtolower($query->toSql()), 'exists'));
+    }
+
+    public function test_belongs_to_search_matches_through_the_foreign_key_and_keeps_relation_constraints(): void
+    {
+        $hidden = Organization::query()->create(['name' => 'Hidden Org']);
+        Record::query()->create(['organization_id' => $hidden->id, 'name' => 'Concealed', 'status' => 'open']);
+        $query = Record::query();
+
+        $this->setRequestQuery(['search' => 'acme']);
+        $result = $this->search(['visibleOrganization.name'], $query);
+
+        $this->assertSame(['Alpha', 'Open Beta'], $result->pluck('name')->all());
+        $this->assertStringContainsString(' in (select ', strtolower($query->toSql()));
+        $this->assertStringNotContainsString('exists', strtolower($query->toSql()));
+
+        $this->setRequestQuery(['search' => 'hidden']);
+        $this->assertSame([], $this->search(['visibleOrganization.name'])->pluck('name')->all());
+        $this->assertSame(['Concealed'], $this->search(['organization.name'])->pluck('name')->all());
+    }
+
+    public function test_belongs_to_search_keeps_related_global_scopes(): void
+    {
+        $hidden = Country::query()->create(['name' => 'Hidden Country']);
+        Organization::query()->create(['country_id' => $hidden->id, 'name' => 'Gamma']);
+        $search = fn (string $relation) => DataTable::query(Organization::query())
+            ->searchable(["{$relation}.name"])
+            ->orderBy('id', 'asc')
+            ->type('collection')
+            ->make()
+            ->pluck('name')
+            ->all();
+
+        $this->setRequestQuery(['search' => 'hidden']);
+
+        $this->assertSame(['Gamma'], $search('country'));
+        $this->assertSame([], $search('scopedCountry'));
+    }
+
+    public function test_belongs_to_search_supports_a_self_referencing_relation(): void
+    {
+        $alpha = Record::query()->where('name', 'Alpha')->first();
+        Record::query()->where('name', 'Beta')->update(['manager_id' => $alpha->id]);
+        $this->setRequestQuery(['search' => 'alpha']);
+
+        $this->assertSame(['Beta'], $this->search(['manager.name'])->pluck('name')->all());
     }
 
     public function test_search_remains_unambiguous_with_relation_sort_joins(): void

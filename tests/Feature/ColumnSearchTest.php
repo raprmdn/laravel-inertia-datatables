@@ -37,6 +37,31 @@ class ColumnSearchTest extends TestCase
         $this->assertSame(['Alpha'], $result->pluck('name')->all());
     }
 
+    public function test_search_callback_is_or_grouped_and_receives_the_raw_search_value(): void
+    {
+        Record::query()->create(['organization_id' => Organization::query()->value('id'), 'name' => 'Gamma', 'status' => 'open']);
+        $this->setRequestQuery(['search' => 'Closed']);
+        $received = null;
+
+        $result = DataTable::query(Record::query()->whereNotNull('organization_id'))
+            ->columnDefinitions([
+                Column::make('status')->searchable(),
+                Column::make('ignored')->searchUsing(fn ($query) => $query->whereNotNull('name')),
+                Column::make('custom')
+                    ->searchable()
+                    ->searchUsing(function ($query, string $search) use (&$received): void {
+                        $received = $search;
+                        $query->where('name', 'Alpha')->where('status', 'open');
+                    }),
+            ])
+            ->orderBy('id', 'asc')
+            ->type('collection')
+            ->make();
+
+        $this->assertSame('Closed', $received);
+        $this->assertSame(['Alpha', 'Beta'], $result->pluck('name')->all());
+    }
+
     public function test_legacy_and_definition_search_configuration_merge(): void
     {
         $this->setRequestQuery(['search' => 'closed']);

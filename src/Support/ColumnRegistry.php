@@ -133,12 +133,26 @@ final class ColumnRegistry
         $sources = [];
 
         foreach ($this->definitions() as $definition) {
-            if ($definition->isSearchable()) {
+            if ($definition->isSearchable() && $definition->searchCallback() === null) {
                 $sources[$definition->searchSource()] = true;
             }
         }
 
         return array_keys($sources);
+    }
+
+    /** @return list<callable> */
+    public function searchCallbacks(): array
+    {
+        $callbacks = [];
+
+        foreach ($this->definitions() as $definition) {
+            if ($definition->isSearchable() && $definition->searchCallback() !== null) {
+                $callbacks[] = $definition->searchCallback();
+            }
+        }
+
+        return $callbacks;
     }
 
     /** @return array<string, ColumnDefinition> */

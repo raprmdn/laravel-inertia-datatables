@@ -26,12 +26,14 @@ class ColumnDefinitionGroupTest extends TestCase
     {
         $filter = fn () => null;
         $sort = fn () => null;
+        $search = fn () => null;
         $definitions = Column::group(['primary', 'secondary'])
             ->filterable('status')
             ->sortable('rank')
             ->filterAliases(['live' => 1])
             ->filterUsing($filter)
             ->sortUsing($sort)
+            ->searchUsing($search)
             ->definitions();
 
         foreach ($definitions as $definition) {
@@ -41,6 +43,7 @@ class ColumnDefinitionGroupTest extends TestCase
             $this->assertSame(FilterStrategy::Custom, $definition->filterStrategy());
             $this->assertSame($filter, $definition->filterCallback());
             $this->assertSame($sort, $definition->sortCallback());
+            $this->assertSame($search, $definition->searchCallback());
         }
     }
 

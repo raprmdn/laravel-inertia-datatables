@@ -25,6 +25,8 @@ final class ColumnDefinition
 
     private array $aliases = [];
 
+    private mixed $searchCallback = null;
+
     private ?FilterStrategy $filterStrategy = null;
 
     private mixed $filterCallback = null;
@@ -97,6 +99,13 @@ final class ColumnDefinition
     {
         $this->filterStrategy = FilterStrategy::JsonContains;
         $this->filterCallback = null;
+
+        return $this;
+    }
+
+    public function searchUsing(callable $callback): self
+    {
+        $this->searchCallback = $callback;
 
         return $this;
     }
@@ -176,6 +185,11 @@ final class ColumnDefinition
         return $this->filterStrategy ?? FilterStrategy::Exact;
     }
 
+    public function searchCallback(): mixed
+    {
+        return $this->searchCallback;
+    }
+
     public function filterCallback(): mixed
     {
         return $this->filterCallback;
@@ -220,6 +234,10 @@ final class ColumnDefinition
 
         if ($definition->sortCallback !== null) {
             $this->sortCallback = $definition->sortCallback;
+        }
+
+        if ($definition->searchCallback !== null) {
+            $this->searchCallback = $definition->searchCallback;
         }
     }
 

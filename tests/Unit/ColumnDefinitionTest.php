@@ -63,11 +63,14 @@ class ColumnDefinitionTest extends TestCase
     {
         $filter = fn () => null;
         $sort = fn () => null;
-        $definition = Column::make('score')->filterUsing($filter)->sortUsing($sort);
+        $search = fn () => null;
+        $definition = Column::make('score')->filterUsing($filter)->sortUsing($sort)->searchUsing($search);
 
         $this->assertSame(FilterStrategy::Custom, $definition->filterStrategy());
         $this->assertSame($filter, $definition->filterCallback());
         $this->assertSame($sort, $definition->sortCallback());
+        $this->assertSame($search, $definition->searchCallback());
+        $this->assertFalse($definition->isSearchable());
         $this->assertFalse($definition->isFilterable());
         $this->assertFalse($definition->isSortable());
     }

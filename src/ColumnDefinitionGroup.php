@@ -67,6 +67,11 @@ final class ColumnDefinitionGroup
         return $this->apply(fn (ColumnDefinition $definition) => $definition->jsonContains());
     }
 
+    public function searchUsing(callable $callback): self
+    {
+        return $this->apply(fn (ColumnDefinition $definition) => $definition->searchUsing($callback));
+    }
+
     public function filterUsing(callable $callback): self
     {
         return $this->apply(fn (ColumnDefinition $definition) => $definition->filterUsing($callback));

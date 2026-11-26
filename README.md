@@ -252,7 +252,12 @@ Search behavior:
 - Search values use query bindings.
 - Columns are OR-grouped inside one parenthesized condition.
 - Existing base query constraints remain outside that group.
-- Matching is case-insensitive through `LOWER(column) LIKE ?`.
+- Matching uses `column LIKE ?`, or `ILIKE` on PostgreSQL, without wrapping
+  the column in `LOWER()`. On MySQL, MariaDB, and SQL Server case sensitivity
+  follows the column collation: the default `_ci` collations match
+  case-insensitively, `_bin` and `_cs` columns match case-sensitively. JSON
+  path sources keep `LOWER()` outside PostgreSQL.
+- `%`, `_`, and `[` in the search value match literally, not as wildcards.
 - Empty search values leave the query unchanged.
 
 For Eloquent, dotted sources are relation paths:
@@ -262,7 +267,33 @@ Column::make('contact', 'contact.name')->searchable();
 Column::make('reason', 'reason.parent.name')->searchable();
 ```
 
+Columns on the same relation path share one subquery. A direct `BelongsTo`
+relation is matched through its foreign key (`foreign_key IN (subquery)`), which
+the database can evaluate once instead of once per base row; relation
+constraints and global scopes of the related model still apply. Other relation
+types and nested paths use `whereHas`.
+
 For Query Builder, dotted sources are SQL table or alias references.
+
+### Custom Search
+
+Use a trusted callback when a column needs its own search query:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+
+Column::make('reference')
+    ->searchable()
+    ->searchUsing(function (Builder $query, string $search): void {
+        $query->where('reference', ltrim($search, '#'));
+    });
+```
+
+`searchUsing()` replaces the column's source but does not enable search; also
+call `searchable()`. The callback receives its own nested query and the raw,
+unescaped search value. Its constraints are grouped together and OR-combined
+with the other searchable columns. It runs once during `make()`, only for a
+filled search value, and should not execute the query.
 
 ## Filtering
 
@@ -589,6 +620,7 @@ alias yourself. Search and filter sources are used as configured.
 | `dateRange(?string $source = null): self` | Enable `_from` and `_to` date filtering. |
 | `filterAliases(array $aliases): self` | Merge exact value aliases. |
 | `jsonContains(): self` | Select JSON containment filtering. |
+| `searchUsing(callable $callback): self` | Set custom search; requires `searchable()`. |
 | `filterUsing(callable $callback): self` | Select custom filtering; requires `filterable()`. |
 | `sortUsing(callable $callback): self` | Set custom sorting; requires `sortable()`. |
 
